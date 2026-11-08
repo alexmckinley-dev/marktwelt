@@ -181,13 +181,7 @@ export default function App() {
       </div>
 
       <main>
-        <Canvas camera={{ position: [0, 1.4, 6.6], fov: 45, near: 0.05, far: 200 }} dpr={[1, 2]}
-          gl={{ antialias: true }}
-          onCreated={(s) => {
-            // Nur im Dev-Betrieb: Zugriff für Tests, die ohne sichtbares Fenster Bilder rendern.
-            if (import.meta.env.DEV) (window as unknown as { __mw: unknown }).__mw = s;
-          }}
-        >
+        <Canvas camera={{ position: [0, 1.4, 6.6], fov: 45, near: 0.05, far: 200 }} dpr={[1, 2]} gl={{ antialias: true }}>
           <color attach="background" args={["#030812"]} />
           <fog attach="fog" args={["#030812", 18, 60]} />
           <ambientLight intensity={0.35} />

@@ -48,7 +48,7 @@ export type Hotspot = {
   note?: string;
   assets?: { symbol: string; name: string }[];
 };
-export type HotspotDetail = Omit<Hotspot, "assets"> & { articles: Article[]; assets: { symbol: string; name: string; quote: Maybe<Quote> }[] };
+export type HotspotDetail = Omit<Hotspot, "assets"> & { articles: Article[] | null; newsNote: string | null; assets: { symbol: string; name: string; quote: Maybe<Quote> }[] };
 export type Prediction = {
   id: string;
   title: string;

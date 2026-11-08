@@ -2,7 +2,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { indicators, pctRank, percentile, sma, thin } from "./analytics.ts";
 import { settle } from "./lib.ts";
-import { bisRates, cboeSeries, earnings, ecbSeries, fredSeries, history, news, predictions, quote, summary, type Point } from "./sources.ts";
+import { bisRates, cboeSeries, earnings, ecbSeries, fredSeries, gdeltStatus, history, news, predictions, quote, summary, type Point } from "./sources.ts";
 import { CENTRAL_BANKS, HOTSPOTS, MACRO_SERIES, MARKETS, SECTORS } from "./universe.ts";
 
 type Handler = (params: Record<string, string>, query: URLSearchParams) => Promise<unknown>;
@@ -190,8 +190,18 @@ const routes: [RegExp, string[], Handler][] = [
       const h = HOTSPOTS.find((x) => x.id === id);
       if (!h) throw new Error("unbekannter Brennpunkt");
       const { query, match, ...rest } = h;
-      const [articles, assets] = await Promise.all([news(query), settle(h.assets ?? [], (a) => quote(a.symbol))]);
-      return { ...rest, articles, assets: (h.assets ?? []).map((a, i) => ({ ...a, quote: assets[i] })) };
+      // Höchstens 8 s auf GDELT warten; der Abruf läuft im Hintergrund weiter.
+      const wait = new Promise<null>((r) => setTimeout(() => r(null), 8000));
+      const [articles, assets] = await Promise.all([
+        Promise.race([news(query), wait]).catch((e: Error) => e),
+        settle(h.assets ?? [], (a) => quote(a.symbol)),
+      ]);
+      return {
+        ...rest,
+        articles: Array.isArray(articles) ? articles : null,
+        newsNote: Array.isArray(articles) ? null : articles instanceof Error ? articles.message : gdeltStatus(),
+        assets: (h.assets ?? []).map((a, i) => ({ ...a, quote: assets[i] })),
+      };
     },
   ],
   [

@@ -190,7 +190,7 @@ function Predictions({ items }: { items: Prediction[] }) {
 }
 
 function HotspotPanel({ h, predictions }: { h: Hotspot; predictions: Prediction[] | undefined }) {
-  const { data, error } = useApi<HotspotDetail>(`hotspot/${h.id}`);
+  const { data, error } = useApi<HotspotDetail>(`hotspot/${h.id}`, 60_000);
   return (
     <>
       <h2>{h.name}</h2>
@@ -216,10 +216,10 @@ function HotspotPanel({ h, predictions }: { h: Hotspot; predictions: Prediction[
         </>
       )}
       <h3>Nachrichten</h3>
-      {!data && <Loading error={error} />}
-      {data && <p className="dim small">{data.articles.length} Meldungen der letzten 24 Stunden (GDELT, englischsprachig)</p>}
+      {!data?.articles && <p className="dim">{data?.newsNote ?? error ?? "lädt …"}</p>}
+      {data?.articles && <p className="dim small">{data.articles.length} Meldungen der letzten 24 Stunden (GDELT, englischsprachig)</p>}
       <ul className="news">
-        {data?.articles.slice(0, 25).map((a) => (
+        {data?.articles?.slice(0, 25).map((a) => (
           <li key={a.url}>
             <a href={a.url} target="_blank" rel="noreferrer">
               {a.title}

@@ -269,13 +269,26 @@ const gdeltBlocked = () => {
 const gdeltFailed = new Map<string, number>(); // nach Fehler: diese Suche drei Minuten nicht neu einreihen
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Kurzer Satz für die Oberfläche, solange Nachrichten fehlen. */
+export function gdeltStatus() {
+  if (gdeltPauseUntil > Date.now()) {
+    const at = new Date(gdeltPauseUntil).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+    return `GDELT drosselt gerade. Neuer Versuch ab ${at} Uhr.`;
+  }
+  return "Nachrichten werden geladen. GDELT antwortet langsam, das kann einige Minuten dauern.";
+}
+
 export type Article = { title: string; url: string; domain: string; seen: string; country: string };
 
 type GdeltResp = { articles?: { title: string; url: string; domain: string; seendate: string; sourcecountry: string }[] };
 
 export function news(query: string): Promise<Article[]> {
   return cached(`g:${query}`, 60 * MIN, async () => {
-    if (Date.now() - (gdeltFailed.get(query) ?? 0) < 3 * MIN) throw new Error("GDELT: kurze Pause nach Fehler");
+    if (gdeltPauseUntil > Date.now()) {
+      const at = new Date(gdeltPauseUntil).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+      throw new Error(`GDELT drosselt gerade. Neuer Versuch ab ${at} Uhr.`);
+    }
+    if (Date.now() - (gdeltFailed.get(query) ?? 0) < 3 * MIN) throw new Error("GDELT hat nicht geantwortet. Neuer Versuch in wenigen Minuten.");
     const q = encodeURIComponent(`${query} sourcelang:english`);
     const url = `https://api.gdeltproject.org/api/v2/doc/doc?query=${q}&mode=artlist&maxrecords=250&format=json&timespan=24h&sort=hybridrel`;
     const text = await gdeltQueue(async () => {
@@ -284,6 +297,7 @@ export function news(query: string): Promise<Article[]> {
     }).catch((e: Error) => {
       gdeltFailed.set(query, Date.now());
       if (e.message.startsWith("429")) gdeltBlocked();
+      console.warn(`[gdelt] ${e.name === "TimeoutError" ? "Zeitüberschreitung" : e.message.slice(0, 3)} · Rückzug ${gdeltBackoff / MIN} min · ${query.slice(0, 40)}`);
       throw e;
     });
     if (!text.trim().startsWith("{")) {
@@ -292,6 +306,7 @@ export function news(query: string): Promise<Article[]> {
       throw new Error(`GDELT: ${text.slice(0, 80)}`);
     }
     gdeltBackoff = 0;
+    console.info(`[gdelt] ok · ${query.slice(0, 40)}`);
     const r = JSON.parse(text) as GdeltResp;
     return (r.articles ?? []).map((a) => ({
       title: a.title.replace(/\s+-\s+/g, "-").replace(/\s+([,.?!:;])/g, "$1"),

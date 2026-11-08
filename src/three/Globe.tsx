@@ -1,17 +1,18 @@
 import { geoEquirectangular, geoPath } from "d3-geo";
+import { useFrame } from "@react-three/fiber";
 import { useLayoutEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { feature, mesh } from "topojson-client";
 import type { GeometryCollection, Topology } from "topojson-specification";
 import countries from "world-atlas/countries-110m.json";
 import land from "world-atlas/land-110m.json";
-import { ok, type Bank, type HotspotHeat, type MarketDetail, type World } from "../api";
-import { changeColor, fmt, pct } from "../format";
+import { ok, type Bank, type HotspotHeat, type MarketDetail, type Prediction, type World } from "../api";
+import { changeColor, fmt, mix, pct } from "../format";
 import { Burst, Label, Pulse, latLon, upTo, useHover } from "./common";
 
 export const R = 2;
 
-export type Layers = { markets: boolean; banks: boolean; hotspots: boolean };
+export type Layers = { markets: boolean; banks: boolean; hotspots: boolean; chokepoints: boolean };
 export type GlobeSel = { type: "market" | "bank" | "hotspot"; id: string } | null;
 
 // ---------- Erde aus Punkten ----------
@@ -215,6 +216,7 @@ function HotspotOrb({
   lat,
   lon,
   count,
+  preds,
   selected,
   onClick,
 }: {
@@ -222,11 +224,16 @@ function HotspotOrb({
   lat: number;
   lon: number;
   count: number | null;
+  preds: number;
   selected: boolean;
   onClick: () => void;
 }) {
   const [hover, bind] = useHover();
   const p = latLon(lat, lon, R * 1.01);
+  const ring = useRef<THREE.Mesh>(null);
+  useFrame((_, dt) => {
+    if (ring.current) ring.current.rotation.z += dt * 0.8;
+  });
   const size = count == null ? 0.025 : 0.03 + (Math.sqrt(Math.min(count, 250) / 250)) * 0.07;
   const color = count == null ? "#55606e" : "#ff6a3d";
   return (
@@ -243,11 +250,77 @@ function HotspotOrb({
           <meshStandardMaterial color={color} emissive={color} emissiveIntensity={hover || selected ? 3 : 1.6} toneMapped={false} transparent opacity={0.9} />
         </mesh>
       </Pulse>
+      {preds > 0 && (
+        <mesh ref={ring} rotation={[1.1, 0.3, 0]}>
+          <torusGeometry args={[size + 0.035, 0.004, 6, 48, Math.PI * (0.4 + Math.min(preds, 8) * 0.2)]} />
+          <meshBasicMaterial color="#b58cff" toneMapped={false} />
+        </mesh>
+      )}
       {(hover || selected) && (
         <Label position={[0, size + 0.12, 0]}>
           <b>{name}</b>
           <br />
-          <small>{count == null ? "Nachrichten laden …" : `${count}${count >= 250 ? "+" : ""} Meldungen in 24 h`}</small>
+          <small>
+            {count == null ? "Nachrichten laden …" : `${count}${count >= 250 ? "+" : ""} Meldungen in 24 h`}
+            {preds > 0 && ` · ${preds} Prognosen`}
+          </small>
+        </Label>
+      )}
+    </group>
+  );
+}
+
+/** Engpass des Seehandels: ein Tor auf der Oberfläche, Farbe nach Nachrichtenlage. */
+function ChokeGate({
+  name,
+  lat,
+  lon,
+  count,
+  preds,
+  selected,
+  onClick,
+}: {
+  name: string;
+  lat: number;
+  lon: number;
+  count: number | null;
+  preds: number;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  const [hover, bind] = useHover();
+  const p = latLon(lat, lon, R);
+  const q = upTo(p);
+  const t = count == null ? 0 : Math.sqrt(Math.min(count, 150) / 150);
+  const color = count == null ? "#55606e" : mix("#46e0c8", "#ff4d6d", t);
+  const r = 0.055;
+  return (
+    <group position={p} quaternion={q}>
+      <Pulse speed={0.6 + t * 1.5} amp={0.08}>
+        <mesh
+          position={[0, r, 0]}
+          {...bind}
+          onClick={(e) => {
+            e.stopPropagation();
+            onClick();
+          }}
+        >
+          <torusGeometry args={[r, 0.011, 10, 40, Math.PI]} />
+          <meshStandardMaterial color={color} emissive={color} emissiveIntensity={hover || selected ? 3 : 1.5} toneMapped={false} />
+        </mesh>
+      </Pulse>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.003, 0]}>
+        <ringGeometry args={[r - 0.012, r + 0.012, 32]} />
+        <meshBasicMaterial color={color} transparent opacity={0.35} side={THREE.DoubleSide} />
+      </mesh>
+      {(hover || selected) && (
+        <Label position={[0, r * 2 + 0.12, 0]}>
+          <b>{name}</b>
+          <br />
+          <small>
+            Engpass · {count == null ? "Nachrichten laden …" : `${count}${count >= 250 ? "+" : ""} Meldungen in 24 h`}
+            {preds > 0 && ` · ${preds} Prognosen`}
+          </small>
         </Label>
       )}
     </group>
@@ -296,15 +369,18 @@ export function Globe({
   sel,
   onSelect,
   marketDetail,
+  predictions,
 }: {
   world: World | undefined;
   heat: HotspotHeat[] | undefined;
+  predictions: Prediction[] | undefined;
   layers: Layers;
   sel: GlobeSel;
   onSelect: (s: GlobeSel) => void;
   marketDetail: MarketDetail | undefined;
 }) {
   const heatMap = new Map(heat?.map((h) => [h.id, h.count]) ?? []);
+  const predCount = (id: string) => predictions?.filter((p) => p.hotspots.includes(id)).length ?? 0;
   const selMarket = sel?.type === "market" ? world?.markets.find((m) => m.id === sel.id) : undefined;
   return (
     <group onPointerMissed={() => onSelect(null)}>
@@ -327,16 +403,19 @@ export function Globe({
         world?.banks.map((b) => (
           <BankRing key={b.id} bank={b} selected={sel?.type === "bank" && sel.id === b.id} onClick={() => onSelect({ type: "bank", id: b.id })} />
         ))}
-      {layers.hotspots &&
-        world?.hotspots.map((h) => (
-          <HotspotOrb
-            key={h.id}
-            {...h}
-            count={heatMap.get(h.id) ?? null}
-            selected={sel?.type === "hotspot" && sel.id === h.id}
-            onClick={() => onSelect({ type: "hotspot", id: h.id })}
-          />
-        ))}
+      {world?.hotspots.map((h) => {
+        const common = {
+          name: h.name,
+          lat: h.lat,
+          lon: h.lon,
+          count: heatMap.get(h.id) ?? null,
+          preds: predCount(h.id),
+          selected: sel?.type === "hotspot" && sel.id === h.id,
+          onClick: () => onSelect({ type: "hotspot", id: h.id }),
+        };
+        if (h.kind === "engpass") return layers.chokepoints ? <ChokeGate key={h.id} {...common} /> : null;
+        return layers.hotspots ? <HotspotOrb key={h.id} {...common} /> : null;
+      })}
     </group>
   );
 }

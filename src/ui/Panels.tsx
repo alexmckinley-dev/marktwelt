@@ -1,4 +1,4 @@
-import { ok, useApi, type Article, type Earning, type HotspotHeat, type Macro, type MarketDetail, type Sector, type SectorDetail, type Sentiment, type Stock, type World } from "../api";
+import { ok, useApi, type Earning, type Hotspot, type HotspotDetail, type HotspotHeat, type Prediction, type Macro, type MarketDetail, type Sector, type SectorDetail, type Sentiment, type Stock, type World } from "../api";
 import { big, changeColor, dateDe, fmt, moodColor, parseBig, pct, signed, weekdayDe } from "../format";
 import { tilesFor } from "../three/StockChart";
 import type { GlobeSel } from "../three/Globe";
@@ -19,9 +19,11 @@ export function WorldPanel({
   onSel,
   detail,
   onDrill,
+  predictions,
 }: {
   world: World | undefined;
   heat: HotspotHeat[] | undefined;
+  predictions: Prediction[] | undefined;
   sel: GlobeSel;
   onSel: (s: GlobeSel) => void;
   detail: MarketDetail | undefined;
@@ -95,14 +97,20 @@ export function WorldPanel({
       </>
     );
   }
-  if (sel?.type === "hotspot") return <HotspotPanel id={sel.id} />;
+  if (sel?.type === "hotspot") {
+    const h = world.hotspots.find((x) => x.id === sel.id)!;
+    return <HotspotPanel key={h.id} h={h} predictions={predictions?.filter((p) => p.hotspots.includes(h.id))} />;
+  }
 
   const ranked = world.markets.filter((m) => ok(m.quote)).sort((a, b) => (ok(b.quote) ? b.quote.changePct ?? 0 : 0) - (ok(a.quote) ? a.quote.changePct ?? 0 : 0));
   const heatMap = new Map(heat?.map((h) => [h.id, h]) ?? []);
   return (
     <>
       <h2>Weltlage</h2>
-      <p className="dim small">Säulen: Märkte (Höhe = Tagesbewegung). Goldene Ringe: Notenbanken (Größe = Zins). Glut: geopolitische Brennpunkte (Nachrichtenlage 24 h).</p>
+      <p className="dim small">
+        Säulen: Märkte (Höhe = Tagesbewegung). Goldene Ringe: Notenbanken (Größe = Zins). Glut: geopolitische Brennpunkte (Nachrichtenlage 24 h), violetter Ring:
+        Prognosemärkte dazu. Tore: Engpässe des Seehandels.
+      </p>
       <h3>Märkte heute</h3>
       <table className="click">
         <tbody>
@@ -127,32 +135,91 @@ export function WorldPanel({
           ))}
         </tbody>
       </table>
-      <h3>Brennpunkte</h3>
-      <table className="click">
-        <tbody>
-          {[...world.hotspots]
-            .sort((a, b) => (heatMap.get(b.id)?.count ?? -1) - (heatMap.get(a.id)?.count ?? -1))
-            .map((h) => (
-              <tr key={h.id} onClick={() => onSel({ type: "hotspot", id: h.id })}>
-                <td>{h.name}</td>
-                <td className="dim">{heatMap.get(h.id)?.count ?? "…"}</td>
-              </tr>
-            ))}
-        </tbody>
-      </table>
+      {(["brennpunkt", "engpass"] as const).map((kind) => (
+        <div key={kind}>
+          <h3>{kind === "brennpunkt" ? "Brennpunkte" : "Engpässe"}</h3>
+          <table className="click">
+            <tbody>
+              {world.hotspots
+                .filter((h) => h.kind === kind)
+                .sort((a, b) => (heatMap.get(b.id)?.count ?? -1) - (heatMap.get(a.id)?.count ?? -1))
+                .map((h) => (
+                  <tr key={h.id} onClick={() => onSel({ type: "hotspot", id: h.id })}>
+                    <td>{h.name}</td>
+                    <td className="dim">{heatMap.get(h.id)?.count ?? "…"}</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
+      {predictions && predictions.length > 0 && (
+        <>
+          <h3>Prognosemärkte</h3>
+          <Predictions items={predictions.slice(0, 8)} />
+        </>
+      )}
     </>
   );
 }
 
-function HotspotPanel({ id }: { id: string }) {
-  const { data, error } = useApi<{ name: string; articles: Article[] }>(`hotspot/${id}`);
-  if (!data) return <Loading error={error} />;
+function Predictions({ items }: { items: Prediction[] }) {
   return (
     <>
-      <h2>{data.name}</h2>
-      <p className="dim small">{data.articles.length} Meldungen der letzten 24 Stunden (GDELT, englischsprachig)</p>
+      {items.map((p) => (
+        <div key={p.id} className="part">
+          <div className="row">
+            <a className="plain" href={p.url} target="_blank" rel="noreferrer">
+              {p.title}
+              {p.pick && <span className="dim"> · {p.pick}</span>}
+            </a>
+            <b style={{ color: "#b58cff", marginLeft: 8 }}>{fmt(p.prob * 100, 0)} %</b>
+          </div>
+          <div className="bar">
+            <i style={{ width: `${p.prob * 100}%`, background: "#b58cff" }} />
+          </div>
+          <small className="dim">
+            7 Tage {p.change7d == null || Math.round(p.change7d * 100) === 0 ? "±0 Pkt." : `${signed(Math.round(p.change7d * 100), 0)} Pkt.`} · Umsatz {big(p.volume)} $
+            {p.endDate && ` · bis ${dateDe(p.endDate)}`}
+          </small>
+        </div>
+      ))}
+      <p className="dim small">Quelle: Polymarket. Preise sind Wetten, keine Prognosen von Fachleuten.</p>
+    </>
+  );
+}
+
+function HotspotPanel({ h, predictions }: { h: Hotspot; predictions: Prediction[] | undefined }) {
+  const { data, error } = useApi<HotspotDetail>(`hotspot/${h.id}`);
+  return (
+    <>
+      <h2>{h.name}</h2>
+      {h.kind === "engpass" && <p className="dim">Engpass des Seehandels</p>}
+      {h.note && <p>{h.note}</p>}
+      {data && data.assets.length > 0 && (
+        <table>
+          <tbody>
+            {data.assets.map((a) => (
+              <tr key={a.symbol}>
+                <td>{a.name}</td>
+                <td className="dim">{a.symbol}</td>
+                <td>{ok(a.quote) ? <>{fmt(a.quote.price)} <Chg v={a.quote.changePct} /></> : "–"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {predictions && predictions.length > 0 && (
+        <>
+          <h3>Prognosemärkte</h3>
+          <Predictions items={predictions} />
+        </>
+      )}
+      <h3>Nachrichten</h3>
+      {!data && <Loading error={error} />}
+      {data && <p className="dim small">{data.articles.length} Meldungen der letzten 24 Stunden (GDELT, englischsprachig)</p>}
       <ul className="news">
-        {data.articles.slice(0, 25).map((a) => (
+        {data?.articles.slice(0, 25).map((a) => (
           <li key={a.url}>
             <a href={a.url} target="_blank" rel="noreferrer">
               {a.title}
@@ -379,5 +446,67 @@ export function MacroStrip({ data }: { data: Macro[] | undefined }) {
           </div>
         ))}
     </div>
+  );
+}
+
+// ---------- Lagekarte (World Monitor) ----------
+
+export const LAGE_LAYERS = [
+  ["conflicts", "Konflikte"],
+  ["earthquakes", "Erdbeben"],
+  ["weather", "Unwetter"],
+] as const;
+export const LAGE_VIEWS = [
+  { id: "welt", name: "Welt", center: "20,0", zoom: 1 },
+  { id: "europa", name: "Europa", center: "50,15", zoom: 3 },
+  { id: "nahost", name: "Nahost", center: "29,45", zoom: 4 },
+  { id: "ostasien", name: "Ostasien", center: "30,120", zoom: 3 },
+  { id: "amerika", name: "Amerika", center: "15,-80", zoom: 2 },
+] as const;
+
+export function LagePanel({
+  layers,
+  setLayers,
+  view,
+  setView,
+}: {
+  layers: string[];
+  setLayers: (l: string[]) => void;
+  view: string;
+  setView: (v: string) => void;
+}) {
+  return (
+    <>
+      <h2>Lagekarte</h2>
+      <p className="dim small">
+        Live-Karte von World Monitor, eingebettet über den freien Zugang. Aktualisiert sich stündlich. Klick auf ein Ereignis zeigt Details.
+      </p>
+      <h3>Ausschnitt</h3>
+      <div className="actions">
+        {LAGE_VIEWS.map((v) => (
+          <button key={v.id} className={v.id === view ? "on" : ""} onClick={() => setView(v.id)}>
+            {v.name}
+          </button>
+        ))}
+      </div>
+      <h3>Ebenen</h3>
+      {LAGE_LAYERS.map(([k, n]) => (
+        <label key={k} className="check">
+          <input
+            type="checkbox"
+            checked={layers.includes(k)}
+            onChange={(e) => setLayers(e.target.checked ? [...layers, k] : layers.filter((x) => x !== k))}
+          />{" "}
+          {n}
+        </label>
+      ))}
+      <p className="dim small">
+        Weitere Ebenen (Proteste, Kabel, Militär) gibt es nur mit kostenpflichtigem Schlüssel. Quelle und Nutzung:{" "}
+        <a className="plain" href="https://www.worldmonitor.app" target="_blank" rel="noreferrer">
+          worldmonitor.app
+        </a>
+        .
+      </p>
+    </>
   );
 }

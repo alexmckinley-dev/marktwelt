@@ -1,5 +1,5 @@
 import { cached, getJson, getText, num, throttle } from "./lib.ts";
-import { MARKETS, SECTORS } from "./universe.ts";
+import { CENTRAL_BANKS, HOTSPOTS, MARKETS, SECTORS } from "./universe.ts";
 
 const MIN = 60_000;
 
@@ -37,6 +37,109 @@ export function ecbSeries(key: string): Promise<Point[]> {
   });
 }
 
+// ---------- BIS: Leitzinsen als Tagesreihe (keylos, CSV) ----------
+
+export function bisRates(): Promise<Map<string, Point[]>> {
+  return cached("bis:cbpol", 6 * 60 * MIN, async () => {
+    const codes = CENTRAL_BANKS.flatMap((b) => (b.source.kind === "bis" ? [b.source.country] : []));
+    const from = new Date(Date.now() - 5 * 366 * 86400_000).toISOString().slice(0, 10);
+    const csv = await getText(
+      `https://stats.bis.org/api/v1/data/WS_CBPOL/D.${codes.join("+")}/all?startPeriod=${from}&detail=dataonly&format=csv`,
+      30000,
+    );
+    const rows = csv.trim().split("\n");
+    const head = rows[0].split(",");
+    const iA = head.indexOf("REF_AREA");
+    const iD = head.indexOf("TIME_PERIOD");
+    const iV = head.indexOf("OBS_VALUE");
+    const out = new Map<string, Point[]>();
+    for (const r of rows.slice(1)) {
+      const c = r.split(",");
+      const v = Number(c[iV]);
+      if (c[iV] === "" || !Number.isFinite(v)) continue;
+      if (!out.has(c[iA])) out.set(c[iA], []);
+      out.get(c[iA])!.push([c[iD], v]);
+    }
+    for (const pts of out.values()) pts.sort((a, b) => a[0].localeCompare(b[0]));
+    return out;
+  });
+}
+
+// ---------- Cboe: Volatilitätsindizes (keylos, CSV) ----------
+
+export function cboeSeries(symbol: "VIX" | "VIX9D" | "VIX3M"): Promise<Point[]> {
+  return cached(`cboe:${symbol}`, 60 * MIN, async () => {
+    const csv = await getText(`https://cdn-api.cboe.com/api/global/us_indices/daily_prices/${symbol}_History.csv`, 20000);
+    const out: Point[] = [];
+    for (const line of csv.trim().split("\n").slice(1)) {
+      const c = line.split(",");
+      const [m, d, y] = c[0].split("/");
+      const v = Number(c[4]);
+      if (y && Number.isFinite(v)) out.push([`${y}-${m}-${d}`, v]);
+    }
+    return out;
+  });
+}
+
+// ---------- Polymarket: Prognosemärkte zur Geopolitik (keylos) ----------
+
+export type Prediction = {
+  id: string;
+  title: string;
+  pick: string | null; // Ausprägung bei Märkten mit mehreren Antworten oder Fristen
+  prob: number; // Wahrscheinlichkeit für „Ja“, 0..1
+  change7d: number | null;
+  volume: number;
+  endDate: string | null;
+  url: string;
+  hotspots: string[];
+};
+
+type PmMarket = {
+  question: string;
+  groupItemTitle?: string;
+  outcomePrices?: string;
+  oneWeekPriceChange?: number;
+  volume?: string;
+  endDate?: string;
+  active?: boolean;
+  closed?: boolean;
+};
+type PmEvent = { id: string; slug: string; title: string; volume?: number; negRisk?: boolean; markets?: PmMarket[] };
+
+export function predictions(): Promise<Prediction[]> {
+  return cached("pm:geo", 15 * MIN, async () => {
+    const events = await getJson<PmEvent[]>(
+      "https://gamma-api.polymarket.com/events?tag_slug=geopolitics&closed=false&active=true&limit=150&order=volume&ascending=false",
+      20000,
+    );
+    const now = Date.now();
+    const out: Prediction[] = [];
+    for (const e of events) {
+      const open = (e.markets ?? [])
+        .filter((m) => m.active && !m.closed && (!m.endDate || new Date(m.endDate).getTime() > now))
+        .map((m) => ({ m, p: Number(JSON.parse(m.outcomePrices ?? "[]")[0]), v: Number(m.volume ?? 0) }))
+        .filter((x) => Number.isFinite(x.p));
+      if (!open.length) continue;
+      // Mehrere Antworten (z. B. Kandidaten): die führende; Fristen-Leitern: die meistgehandelte.
+      const best = open.reduce((a, b) => ((e.negRisk ? b.p > a.p : b.v > a.v) ? b : a));
+      const hotspots = HOTSPOTS.filter((h) => h.match.test(e.title) || h.match.test(best.m.question)).map((h) => h.id);
+      out.push({
+        id: e.id,
+        title: e.title,
+        pick: open.length > 1 ? best.m.groupItemTitle || null : null,
+        prob: best.p,
+        change7d: best.m.oneWeekPriceChange ?? null,
+        volume: e.volume ?? 0,
+        endDate: best.m.endDate ?? null,
+        url: `https://polymarket.com/event/${e.slug}`,
+        hotspots,
+      });
+    }
+    return out.filter((p) => p.volume >= 500_000);
+  });
+}
+
 // ---------- Nasdaq (Kurse US-gelisteter Aktien und ETFs) ----------
 
 const nasdaqQueue = throttle(3, 150);
@@ -67,7 +170,7 @@ type InfoData = {
   primaryData: { lastSalePrice: string; netChange: string; percentageChange: string; lastTradeTimestamp: string };
 };
 
-const ETFS = new Set([...MARKETS.map((m) => m.etf), ...SECTORS.map((s) => s.etf), "DIA", "IWM", "TLT", "GLD", "HYG", "USO"]);
+const ETFS = new Set([...MARKETS.map((m) => m.etf), ...SECTORS.map((s) => s.etf), "DIA", "IWM", "TLT", "GLD", "HYG", "USO", "WEAT"]);
 const assetGuess = (s: string) => (ETFS.has(s.toUpperCase()) ? "etf" : "stocks");
 
 export function quote(symbol: string, assetclass = assetGuess(symbol)): Promise<Quote> {
@@ -154,7 +257,17 @@ export function earnings(date: string): Promise<Earning[]> {
 
 // ---------- GDELT (Nachrichten, höchstens eine Anfrage je 5 Sekunden) ----------
 
-const gdeltQueue = throttle(1, 5500);
+// GDELT erlaubt einen Abruf je 5 s und sperrt bei Überschreitung länger. Deshalb ein Abruf alle 10 s
+// und nach einer Sperre ein wachsender Rückzug: 1, 2, 4 … höchstens 15 Minuten.
+const gdeltQueue = throttle(1, 10_000);
+let gdeltPauseUntil = 0;
+let gdeltBackoff = 0;
+const gdeltBlocked = () => {
+  gdeltBackoff = Math.min(15 * MIN, gdeltBackoff ? gdeltBackoff * 2 : MIN);
+  gdeltPauseUntil = Date.now() + gdeltBackoff;
+};
+const gdeltFailed = new Map<string, number>(); // nach Fehler: diese Suche drei Minuten nicht neu einreihen
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export type Article = { title: string; url: string; domain: string; seen: string; country: string };
 
@@ -162,10 +275,23 @@ type GdeltResp = { articles?: { title: string; url: string; domain: string; seen
 
 export function news(query: string): Promise<Article[]> {
   return cached(`g:${query}`, 60 * MIN, async () => {
+    if (Date.now() - (gdeltFailed.get(query) ?? 0) < 3 * MIN) throw new Error("GDELT: kurze Pause nach Fehler");
     const q = encodeURIComponent(`${query} sourcelang:english`);
     const url = `https://api.gdeltproject.org/api/v2/doc/doc?query=${q}&mode=artlist&maxrecords=250&format=json&timespan=24h&sort=hybridrel`;
-    const text = await gdeltQueue(() => getText(url, 20000));
-    if (!text.trim().startsWith("{")) throw new Error(`GDELT: ${text.slice(0, 80)}`);
+    const text = await gdeltQueue(async () => {
+      if (gdeltPauseUntil > Date.now()) await sleep(gdeltPauseUntil - Date.now());
+      return getText(url, 60000);
+    }).catch((e: Error) => {
+      gdeltFailed.set(query, Date.now());
+      if (e.message.startsWith("429")) gdeltBlocked();
+      throw e;
+    });
+    if (!text.trim().startsWith("{")) {
+      gdeltFailed.set(query, Date.now());
+      gdeltBlocked();
+      throw new Error(`GDELT: ${text.slice(0, 80)}`);
+    }
+    gdeltBackoff = 0;
     const r = JSON.parse(text) as GdeltResp;
     return (r.articles ?? []).map((a) => ({
       title: a.title.replace(/\s+-\s+/g, "-").replace(/\s+([,.?!:;])/g, "$1"),

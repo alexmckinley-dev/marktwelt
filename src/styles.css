@@ -81,6 +81,12 @@ table.click tbody tr:hover { background: rgba(70, 224, 200, 0.07); }
   background: rgba(70, 224, 200, 0.1); border: 1px solid var(--accent); border-radius: 8px; padding: 7px 12px; cursor: pointer;
 }
 .actions button:hover { background: rgba(70, 224, 200, 0.22); }
+.actions button.on { background: rgba(70, 224, 200, 0.3); }
+label.check { display: block; padding: 3px 0; cursor: pointer; }
+a.plain { color: var(--text); text-decoration: none; }
+a.plain:hover { color: var(--accent); }
+
+.lagemap { position: absolute; top: 12px; left: 12px; width: calc(100% - 396px); height: calc(100% - 24px); border: 1px solid var(--line); border-radius: 14px; background: var(--bg); z-index: 2; }
 
 .news { list-style: none; padding: 0; margin: 0; }
 .news li { padding: 7px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.05); display: flex; flex-direction: column; gap: 2px; }
@@ -119,5 +125,6 @@ footer { border-top: 1px solid var(--line); background: rgba(3, 8, 18, 0.92); z-
   header form { width: 100%; }
   header input { width: 100%; }
   aside { top: auto; left: 8px; right: 8px; width: auto; height: 42%; }
+  .lagemap { top: 8px; left: 8px; width: calc(100% - 16px); height: calc(58% - 28px); }
   .crumbs .layers { display: none; }
 }

@@ -48,38 +48,57 @@ export type CentralBank = {
   short: string;
   lat: number;
   lon: number;
-  source: { kind: "fred"; series: string; label: string } | { kind: "ecb"; key: string; label: string };
+  source:
+    | { kind: "fred"; series: string; label: string }
+    | { kind: "ecb"; key: string; label: string }
+    | { kind: "bis"; country: string; label: string };
 };
 
-// Fed und EZB liefern den Leitzins tagesaktuell. Für die übrigen gibt es keylos nur den
-// Tagesgeldsatz der OECD (monatlich, mit Verzug); die Oberfläche nennt das und den Stand.
+// Fed und EZB kommen direkt von der Quelle. Die übrigen Leitzinsen liefert die BIS
+// (Bank für Internationalen Zahlungsausgleich) als Tagesreihe, keylos.
 export const CENTRAL_BANKS: CentralBank[] = [
   { id: "fed", name: "Federal Reserve", short: "Fed", lat: 38.89, lon: -77.04, source: { kind: "fred", series: "DFEDTARU", label: "Leitzins, Obergrenze" } },
   { id: "ezb", name: "Europäische Zentralbank", short: "EZB", lat: 50.11, lon: 8.7, source: { kind: "ecb", key: "FM/B.U2.EUR.4F.KR.DFR.LEV", label: "Einlagesatz" } },
-  { id: "boe", name: "Bank of England", short: "BoE", lat: 51.51, lon: -0.09, source: { kind: "fred", series: "IRSTCI01GBM156N", label: "Tagesgeldsatz (OECD)" } },
-  { id: "boj", name: "Bank of Japan", short: "BoJ", lat: 35.69, lon: 139.77, source: { kind: "fred", series: "IRSTCI01JPM156N", label: "Tagesgeldsatz (OECD)" } },
-  { id: "boc", name: "Bank of Canada", short: "BoC", lat: 45.42, lon: -75.7, source: { kind: "fred", series: "IRSTCI01CAM156N", label: "Tagesgeldsatz (OECD)" } },
-  { id: "rba", name: "Reserve Bank of Australia", short: "RBA", lat: -33.87, lon: 151.21, source: { kind: "fred", series: "IRSTCI01AUM156N", label: "Tagesgeldsatz (OECD)" } },
-  { id: "rbi", name: "Reserve Bank of India", short: "RBI", lat: 18.93, lon: 72.83, source: { kind: "fred", series: "IRSTCI01INM156N", label: "Tagesgeldsatz (OECD)" } },
-  { id: "bcb", name: "Banco Central do Brasil", short: "BCB", lat: -15.79, lon: -47.88, source: { kind: "fred", series: "IRSTCI01BRM156N", label: "Tagesgeldsatz (OECD)" } },
-  { id: "snb", name: "Schweizerische Nationalbank", short: "SNB", lat: 46.95, lon: 7.44, source: { kind: "fred", series: "IRSTCI01CHM156N", label: "Tagesgeldsatz (OECD)" } },
-  { id: "pboc", name: "People's Bank of China", short: "PBoC", lat: 39.9, lon: 116.4, source: { kind: "fred", series: "IRSTCI01CNM156N", label: "Tagesgeldsatz (OECD)" } },
+  { id: "boe", name: "Bank of England", short: "BoE", lat: 51.51, lon: -0.09, source: { kind: "bis", country: "GB", label: "Leitzins (BIS)" } },
+  { id: "boj", name: "Bank of Japan", short: "BoJ", lat: 35.69, lon: 139.77, source: { kind: "bis", country: "JP", label: "Leitzins (BIS)" } },
+  { id: "boc", name: "Bank of Canada", short: "BoC", lat: 45.42, lon: -75.7, source: { kind: "bis", country: "CA", label: "Leitzins (BIS)" } },
+  { id: "rba", name: "Reserve Bank of Australia", short: "RBA", lat: -33.87, lon: 151.21, source: { kind: "bis", country: "AU", label: "Leitzins (BIS)" } },
+  { id: "rbi", name: "Reserve Bank of India", short: "RBI", lat: 18.93, lon: 72.83, source: { kind: "bis", country: "IN", label: "Leitzins (BIS)" } },
+  { id: "bcb", name: "Banco Central do Brasil", short: "BCB", lat: -15.79, lon: -47.88, source: { kind: "bis", country: "BR", label: "Leitzins (BIS)" } },
+  { id: "snb", name: "Schweizerische Nationalbank", short: "SNB", lat: 46.95, lon: 7.44, source: { kind: "bis", country: "CH", label: "Leitzins (BIS)" } },
+  { id: "pboc", name: "People's Bank of China", short: "PBoC", lat: 39.9, lon: 116.4, source: { kind: "bis", country: "CN", label: "Leitzins (BIS)" } },
 ];
 
-export type Hotspot = { id: string; name: string; lat: number; lon: number; query: string };
+export type Hotspot = {
+  id: string;
+  name: string;
+  kind: "brennpunkt" | "engpass";
+  lat: number;
+  lon: number;
+  query: string; // GDELT-Suche, Nachrichten der letzten 24 Stunden, englischsprachig
+  match: RegExp; // ordnet Prognosemärkte (Polymarket) über den Titel zu
+  note?: string;
+  assets?: { symbol: string; name: string }[];
+};
 
-// Suchbegriffe für GDELT (Nachrichten der letzten 24 Stunden, englischsprachig).
 export const HOTSPOTS: Hotspot[] = [
-  { id: "ukraine", name: "Russland–Ukraine", lat: 49.0, lon: 32.0, query: '(Ukraine OR Russia) (war OR offensive OR ceasefire OR sanctions)' },
-  { id: "nahost", name: "Nahost", lat: 31.5, lon: 35.0, query: '(Israel OR Gaza OR Iran OR Lebanon) (strike OR war OR ceasefire)' },
-  { id: "taiwan", name: "Taiwanstraße", lat: 24.0, lon: 120.0, query: '(Taiwan OR "South China Sea") (China OR military OR drills)' },
-  { id: "handel", name: "Handelsstreit USA–China", lat: 35.0, lon: -100.0, query: '(tariffs OR "export controls" OR "trade war") (China OR "United States")' },
-  { id: "rotes-meer", name: "Rotes Meer und Seewege", lat: 15.0, lon: 42.0, query: '("Red Sea" OR Houthi OR "Strait of Hormuz" OR shipping) (attack OR disruption)' },
-  { id: "korea", name: "Koreanische Halbinsel", lat: 39.0, lon: 126.0, query: '("North Korea" OR Pyongyang) (missile OR nuclear)' },
-  { id: "eu-politik", name: "EU-Politik", lat: 50.85, lon: 4.35, query: '("European Union" OR Brussels OR "European Commission") (budget OR election OR crisis)' },
-  { id: "opec", name: "Öl und OPEC", lat: 24.5, lon: 54.4, query: '(OPEC OR "oil price" OR "crude oil") (supply OR output OR cut)' },
-  { id: "lateinamerika", name: "Lateinamerika", lat: -15.0, lon: -60.0, query: '(Argentina OR Brazil OR Venezuela OR Mexico) (election OR default OR protest OR crisis)' },
-  { id: "sahel", name: "Afrika und Sahel", lat: 14.0, lon: 2.0, query: '(Sahel OR Sudan OR Congo OR Nigeria) (coup OR conflict OR crisis)' },
+  { id: "ukraine", name: "Russland–Ukraine", kind: "brennpunkt", lat: 49.0, lon: 32.0, query: '(Ukraine OR Russia) (war OR offensive OR ceasefire OR sanctions)', match: /ukrain|russia|putin|zelensk|donbas|crimea|kyiv/i },
+  { id: "nahost", name: "Nahost", kind: "brennpunkt", lat: 31.5, lon: 35.0, query: '(Israel OR Gaza OR Iran OR Lebanon) (strike OR war OR ceasefire)', match: /israel|gaza|iran|leban|hezbollah|netanyahu|hamas|syria|khamenei/i },
+  { id: "taiwan", name: "Taiwanstraße", kind: "brennpunkt", lat: 24.0, lon: 120.0, query: '(Taiwan OR "South China Sea") (China OR military OR drills)', match: /taiwan|south china sea/i },
+  { id: "handel", name: "Handelsstreit USA–China", kind: "brennpunkt", lat: 35.0, lon: -100.0, query: '(tariffs OR "export controls" OR "trade war") (China OR "United States")', match: /tariff|trade deal|trade war|export control/i },
+  { id: "korea", name: "Koreanische Halbinsel", kind: "brennpunkt", lat: 39.0, lon: 126.0, query: '("North Korea" OR Pyongyang) (missile OR nuclear)', match: /korea|kim jong/i },
+  { id: "eu-politik", name: "EU-Politik", kind: "brennpunkt", lat: 50.85, lon: 4.35, query: '("European Union" OR Brussels OR "European Commission") (budget OR election OR crisis)', match: /\beu\b|european|eurozone|france|germany|macron|merz/i },
+  { id: "opec", name: "Öl und OPEC", kind: "brennpunkt", lat: 24.5, lon: 54.4, query: '(OPEC OR "oil price" OR "crude oil") (supply OR output OR cut)', match: /opec|oil price|crude|brent|\bwti\b/i },
+  { id: "lateinamerika", name: "Lateinamerika", kind: "brennpunkt", lat: -15.0, lon: -60.0, query: '(Argentina OR Brazil OR Venezuela OR Mexico) (election OR default OR protest OR crisis)', match: /venezuela|maduro|brazil|lula|argentin|milei|mexico|colombia|cuba/i },
+  { id: "sahel", name: "Afrika und Sahel", kind: "brennpunkt", lat: 14.0, lon: 2.0, query: '(Sahel OR Sudan OR Congo OR Nigeria) (coup OR conflict OR crisis)', match: /sudan|sahel|\bmali\b|burkina|congo|nigeria|ethiopia|somalia/i },
+
+  // Engpässe des Seehandels. Idee aus World Monitor, Daten hier nur aus GDELT und Polymarket.
+  { id: "hormus", name: "Straße von Hormus", kind: "engpass", lat: 26.57, lon: 56.25, query: '("Strait of Hormuz" OR Hormuz) (tanker OR shipping OR navy OR blockade OR oil)', match: /hormuz|blockade|kharg/i, note: "Ausgang des Persischen Golfs, wichtigster Engpass für Öl und Flüssiggas.", assets: [{ symbol: "USO", name: "Öl (WTI)" }] },
+  { id: "bab-al-mandab", name: "Bab al-Mandab", kind: "engpass", lat: 12.6, lon: 43.4, query: '("Bab el-Mandeb" OR "Red Sea" OR Houthi) (ship OR shipping OR attack OR vessel)', match: /houthi|red sea|mandeb|yemen/i, note: "Südeingang des Roten Meers, Seeweg zwischen Asien und dem Suezkanal.", assets: [{ symbol: "USO", name: "Öl (WTI)" }] },
+  { id: "suez", name: "Suezkanal", kind: "engpass", lat: 30.45, lon: 32.35, query: '("Suez Canal") (shipping OR transit OR traffic OR vessels)', match: /suez|egypt/i, note: "Kürzester Seeweg zwischen Asien und Europa. Die Ausweichroute führt um das Kap der Guten Hoffnung." },
+  { id: "malakka", name: "Straße von Malakka", kind: "engpass", lat: 2.5, lon: 101.0, query: '("Strait of Malacca" OR "Malacca Strait" OR "Singapore Strait") (shipping OR tanker OR piracy OR vessel)', match: /malacca|singapore strait/i, note: "Hauptweg zwischen Indischem Ozean und Pazifik, vor allem für Öl nach China, Japan und Korea.", assets: [{ symbol: "USO", name: "Öl (WTI)" }] },
+  { id: "panama", name: "Panamakanal", kind: "engpass", lat: 9.08, lon: -79.68, query: '("Panama Canal") (drought OR transit OR shipping OR traffic)', match: /panama/i, note: "Verbindet Atlantik und Pazifik. Der Wasserstand begrenzt die Zahl der Durchfahrten." },
+  { id: "bosporus", name: "Bosporus", kind: "engpass", lat: 41.25, lon: 29.1, query: '(Bosphorus OR "Turkish Straits" OR Dardanelles) (tanker OR shipping OR vessel OR transit)', match: /bosphorus|turkish strait|black sea/i, note: "Einziger Ausgang des Schwarzen Meers, Weg für Getreide und Öl aus Russland und der Ukraine.", assets: [{ symbol: "WEAT", name: "Weizen" }, { symbol: "USO", name: "Öl (WTI)" }] },
 ];
 
 export type Sector = { id: string; name: string; etf: string; members: string[] };

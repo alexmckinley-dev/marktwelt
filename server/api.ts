@@ -2,7 +2,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { indicators, pctRank, percentile, sma, thin } from "./analytics.ts";
 import { settle } from "./lib.ts";
-import { earnings, ecbSeries, fredSeries, history, news, quote, summary, type Point } from "./sources.ts";
+import { bisRates, cboeSeries, earnings, ecbSeries, fredSeries, history, news, predictions, quote, summary, type Point } from "./sources.ts";
 import { CENTRAL_BANKS, HOTSPOTS, MACRO_SERIES, MARKETS, SECTORS } from "./universe.ts";
 
 type Handler = (params: Record<string, string>, query: URLSearchParams) => Promise<unknown>;
@@ -10,7 +10,9 @@ type Handler = (params: Record<string, string>, query: URLSearchParams) => Promi
 const daysOld = (iso: string) => (Date.now() - new Date(iso).getTime()) / 86400_000;
 
 async function bankRate(b: (typeof CENTRAL_BANKS)[number]) {
-  const pts: Point[] = b.source.kind === "fred" ? await fredSeries(b.source.series) : await ecbSeries(b.source.key);
+  const src = b.source;
+  const pts: Point[] =
+    src.kind === "fred" ? await fredSeries(src.series) : src.kind === "ecb" ? await ecbSeries(src.key) : ((await bisRates()).get(src.country) ?? []);
   const last = pts.at(-1);
   if (!last) throw new Error("keine Werte");
   // letzte echte Änderung suchen
@@ -32,8 +34,9 @@ async function bankRate(b: (typeof CENTRAL_BANKS)[number]) {
 }
 
 async function sentiment() {
-  const [vix, hy, spx, tlt, spy, sectorHist] = await Promise.all([
-    fredSeries("VIXCLS"),
+  const [vix, vix3m, hy, spx, tlt, spy, sectorHist] = await Promise.all([
+    cboeSeries("VIX").catch(() => fredSeries("VIXCLS")),
+    cboeSeries("VIX3M").catch(() => null),
     fredSeries("BAMLH0A0HYM2"),
     fredSeries("SP500"),
     history("TLT", 500).catch(() => null),
@@ -52,6 +55,20 @@ async function sentiment() {
       value: vix.at(-1)![1].toFixed(1),
       explain: "Hoher VIX im Jahresvergleich heißt Angst.",
     });
+
+  if (vix3m && vix3m.length > 260) {
+    // Laufzeitstruktur: Liegt die Ein-Monats- über der Drei-Monats-Volatilität, ist die Angst akut.
+    const m3 = new Map(vix3m);
+    const ratios = vix.filter((p) => m3.has(p[0])).map((p) => p[1] / m3.get(p[0])!);
+    const cur = ratios.at(-1)!;
+    parts.push({
+      id: "term",
+      name: "Laufzeitstruktur (VIX zu VIX3M)",
+      score: Math.round((1 - pctRank(ratios.slice(-252), cur)) * 100),
+      value: `${cur.toFixed(2)} · ${cur > 1 ? "invers" : "normal"}`,
+      explain: "Über 1 heißt: kurzfristig mehr Angst als langfristig.",
+    });
+  }
 
   const hyP = percentile(hy);
   if (hyP != null)
@@ -146,7 +163,7 @@ const routes: [RegExp, string[], Handler][] = [
       return {
         markets: MARKETS.map((m, i) => ({ ...m, quote: markets[i] })),
         banks: CENTRAL_BANKS.map(({ source, ...b }, i) => ({ ...b, data: banks[i] })),
-        hotspots: HOTSPOTS.map(({ query, ...h }) => h),
+        hotspots: HOTSPOTS.map(({ query, match, ...h }) => h),
       };
     },
   ],
@@ -172,7 +189,9 @@ const routes: [RegExp, string[], Handler][] = [
     async ({ id }) => {
       const h = HOTSPOTS.find((x) => x.id === id);
       if (!h) throw new Error("unbekannter Brennpunkt");
-      return { ...h, articles: await news(h.query) };
+      const { query, match, ...rest } = h;
+      const [articles, assets] = await Promise.all([news(query), settle(h.assets ?? [], (a) => quote(a.symbol))]);
+      return { ...rest, articles, assets: (h.assets ?? []).map((a, i) => ({ ...a, quote: assets[i] })) };
     },
   ],
   [
@@ -198,6 +217,7 @@ const routes: [RegExp, string[], Handler][] = [
     },
   ],
   [/^\/api\/sentiment$/, [], () => sentiment()],
+  [/^\/api\/predictions$/, [], () => predictions()],
   [
     /^\/api\/sectors$/,
     [],
@@ -308,4 +328,6 @@ export async function handle(req: IncomingMessage, res: ServerResponse): Promise
 /** Lädt die gedrosselten Nachrichten der Brennpunkte im Hintergrund vor. */
 export function warmUp() {
   for (const h of HOTSPOTS) news(h.query).catch(() => {});
+  bisRates().catch(() => {});
+  predictions().catch(() => {});
 }

@@ -39,7 +39,27 @@ export type Bank = {
     history: Point[];
   }>;
 };
-export type Hotspot = { id: string; name: string; lat: number; lon: number };
+export type Hotspot = {
+  id: string;
+  name: string;
+  kind: "brennpunkt" | "engpass";
+  lat: number;
+  lon: number;
+  note?: string;
+  assets?: { symbol: string; name: string }[];
+};
+export type HotspotDetail = Omit<Hotspot, "assets"> & { articles: Article[]; assets: { symbol: string; name: string; quote: Maybe<Quote> }[] };
+export type Prediction = {
+  id: string;
+  title: string;
+  pick: string | null;
+  prob: number;
+  change7d: number | null;
+  volume: number;
+  endDate: string | null;
+  url: string;
+  hotspots: string[];
+};
 export type World = { markets: Market[]; banks: Bank[]; hotspots: Hotspot[] };
 export type Article = { title: string; url: string; domain: string; seen: string; country: string };
 export type HotspotHeat = { id: string; count: number | null; top: Article[] };

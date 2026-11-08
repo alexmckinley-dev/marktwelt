@@ -1,0 +1,119 @@
+// Feste Landkarte des Tools: welche Märkte, Notenbanken, Brennpunkte und Sektoren es zeigt.
+// Kursdaten kommen live; hier stehen nur Namen, Orte und Symbole.
+
+export type Market = {
+  id: string;
+  name: string;
+  region: "Amerika" | "Europa" | "Asien-Pazifik" | "Schwellenländer";
+  etf: string; // US-gelistetes Länder-ETF, Kurse in USD
+  index: string; // Name des Leitindex, den das ETF abbildet
+  lat: number;
+  lon: number;
+};
+
+export const MARKETS: Market[] = [
+  { id: "us", name: "USA", region: "Amerika", etf: "SPY", index: "S&P 500", lat: 40.7, lon: -74.0 },
+  { id: "us-tech", name: "USA Tech", region: "Amerika", etf: "QQQ", index: "Nasdaq 100", lat: 37.4, lon: -122.1 },
+  { id: "ca", name: "Kanada", region: "Amerika", etf: "EWC", index: "MSCI Kanada", lat: 43.65, lon: -79.38 },
+  { id: "mx", name: "Mexiko", region: "Schwellenländer", etf: "EWW", index: "MSCI Mexiko", lat: 19.43, lon: -99.13 },
+  { id: "br", name: "Brasilien", region: "Schwellenländer", etf: "EWZ", index: "MSCI Brasilien", lat: -23.55, lon: -46.63 },
+  { id: "ar", name: "Argentinien", region: "Schwellenländer", etf: "ARGT", index: "MSCI Argentinien", lat: -34.6, lon: -58.38 },
+  { id: "uk", name: "Großbritannien", region: "Europa", etf: "EWU", index: "MSCI UK", lat: 51.51, lon: -0.09 },
+  { id: "de", name: "Deutschland", region: "Europa", etf: "EWG", index: "MSCI Deutschland", lat: 50.11, lon: 8.68 },
+  { id: "fr", name: "Frankreich", region: "Europa", etf: "EWQ", index: "MSCI Frankreich", lat: 48.86, lon: 2.35 },
+  { id: "ch", name: "Schweiz", region: "Europa", etf: "EWL", index: "MSCI Schweiz", lat: 47.37, lon: 8.54 },
+  { id: "it", name: "Italien", region: "Europa", etf: "EWI", index: "MSCI Italien", lat: 45.46, lon: 9.19 },
+  { id: "es", name: "Spanien", region: "Europa", etf: "EWP", index: "MSCI Spanien", lat: 40.42, lon: -3.7 },
+  { id: "nl", name: "Niederlande", region: "Europa", etf: "EWN", index: "MSCI Niederlande", lat: 52.37, lon: 4.9 },
+  { id: "se", name: "Schweden", region: "Europa", etf: "EWD", index: "MSCI Schweden", lat: 59.33, lon: 18.07 },
+  { id: "pl", name: "Polen", region: "Schwellenländer", etf: "EPOL", index: "MSCI Polen", lat: 52.23, lon: 21.01 },
+  { id: "tr", name: "Türkei", region: "Schwellenländer", etf: "TUR", index: "MSCI Türkei", lat: 41.01, lon: 28.98 },
+  { id: "sa", name: "Saudi-Arabien", region: "Schwellenländer", etf: "KSA", index: "MSCI Saudi-Arabien", lat: 24.71, lon: 46.68 },
+  { id: "il", name: "Israel", region: "Schwellenländer", etf: "EIS", index: "MSCI Israel", lat: 32.09, lon: 34.78 },
+  { id: "za", name: "Südafrika", region: "Schwellenländer", etf: "EZA", index: "MSCI Südafrika", lat: -26.2, lon: 28.05 },
+  { id: "in", name: "Indien", region: "Schwellenländer", etf: "INDA", index: "MSCI Indien", lat: 19.08, lon: 72.88 },
+  { id: "cn", name: "China", region: "Schwellenländer", etf: "MCHI", index: "MSCI China", lat: 31.23, lon: 121.47 },
+  { id: "hk", name: "Hongkong", region: "Asien-Pazifik", etf: "EWH", index: "MSCI Hongkong", lat: 22.28, lon: 114.16 },
+  { id: "tw", name: "Taiwan", region: "Schwellenländer", etf: "EWT", index: "MSCI Taiwan", lat: 25.03, lon: 121.56 },
+  { id: "kr", name: "Südkorea", region: "Schwellenländer", etf: "EWY", index: "MSCI Südkorea", lat: 37.57, lon: 126.98 },
+  { id: "jp", name: "Japan", region: "Asien-Pazifik", etf: "EWJ", index: "MSCI Japan", lat: 35.68, lon: 139.69 },
+  { id: "sg", name: "Singapur", region: "Asien-Pazifik", etf: "EWS", index: "MSCI Singapur", lat: 1.29, lon: 103.85 },
+  { id: "id", name: "Indonesien", region: "Schwellenländer", etf: "EIDO", index: "MSCI Indonesien", lat: -6.2, lon: 106.85 },
+  { id: "au", name: "Australien", region: "Asien-Pazifik", etf: "EWA", index: "MSCI Australien", lat: -33.87, lon: 151.21 },
+];
+
+export type CentralBank = {
+  id: string;
+  name: string;
+  short: string;
+  lat: number;
+  lon: number;
+  source: { kind: "fred"; series: string; label: string } | { kind: "ecb"; key: string; label: string };
+};
+
+// Fed und EZB liefern den Leitzins tagesaktuell. Für die übrigen gibt es keylos nur den
+// Tagesgeldsatz der OECD (monatlich, mit Verzug); die Oberfläche nennt das und den Stand.
+export const CENTRAL_BANKS: CentralBank[] = [
+  { id: "fed", name: "Federal Reserve", short: "Fed", lat: 38.89, lon: -77.04, source: { kind: "fred", series: "DFEDTARU", label: "Leitzins, Obergrenze" } },
+  { id: "ezb", name: "Europäische Zentralbank", short: "EZB", lat: 50.11, lon: 8.7, source: { kind: "ecb", key: "FM/B.U2.EUR.4F.KR.DFR.LEV", label: "Einlagesatz" } },
+  { id: "boe", name: "Bank of England", short: "BoE", lat: 51.51, lon: -0.09, source: { kind: "fred", series: "IRSTCI01GBM156N", label: "Tagesgeldsatz (OECD)" } },
+  { id: "boj", name: "Bank of Japan", short: "BoJ", lat: 35.69, lon: 139.77, source: { kind: "fred", series: "IRSTCI01JPM156N", label: "Tagesgeldsatz (OECD)" } },
+  { id: "boc", name: "Bank of Canada", short: "BoC", lat: 45.42, lon: -75.7, source: { kind: "fred", series: "IRSTCI01CAM156N", label: "Tagesgeldsatz (OECD)" } },
+  { id: "rba", name: "Reserve Bank of Australia", short: "RBA", lat: -33.87, lon: 151.21, source: { kind: "fred", series: "IRSTCI01AUM156N", label: "Tagesgeldsatz (OECD)" } },
+  { id: "rbi", name: "Reserve Bank of India", short: "RBI", lat: 18.93, lon: 72.83, source: { kind: "fred", series: "IRSTCI01INM156N", label: "Tagesgeldsatz (OECD)" } },
+  { id: "bcb", name: "Banco Central do Brasil", short: "BCB", lat: -15.79, lon: -47.88, source: { kind: "fred", series: "IRSTCI01BRM156N", label: "Tagesgeldsatz (OECD)" } },
+  { id: "snb", name: "Schweizerische Nationalbank", short: "SNB", lat: 46.95, lon: 7.44, source: { kind: "fred", series: "IRSTCI01CHM156N", label: "Tagesgeldsatz (OECD)" } },
+  { id: "pboc", name: "People's Bank of China", short: "PBoC", lat: 39.9, lon: 116.4, source: { kind: "fred", series: "IRSTCI01CNM156N", label: "Tagesgeldsatz (OECD)" } },
+];
+
+export type Hotspot = { id: string; name: string; lat: number; lon: number; query: string };
+
+// Suchbegriffe für GDELT (Nachrichten der letzten 24 Stunden, englischsprachig).
+export const HOTSPOTS: Hotspot[] = [
+  { id: "ukraine", name: "Russland–Ukraine", lat: 49.0, lon: 32.0, query: '(Ukraine OR Russia) (war OR offensive OR ceasefire OR sanctions)' },
+  { id: "nahost", name: "Nahost", lat: 31.5, lon: 35.0, query: '(Israel OR Gaza OR Iran OR Lebanon) (strike OR war OR ceasefire)' },
+  { id: "taiwan", name: "Taiwanstraße", lat: 24.0, lon: 120.0, query: '(Taiwan OR "South China Sea") (China OR military OR drills)' },
+  { id: "handel", name: "Handelsstreit USA–China", lat: 35.0, lon: -100.0, query: '(tariffs OR "export controls" OR "trade war") (China OR "United States")' },
+  { id: "rotes-meer", name: "Rotes Meer und Seewege", lat: 15.0, lon: 42.0, query: '("Red Sea" OR Houthi OR "Strait of Hormuz" OR shipping) (attack OR disruption)' },
+  { id: "korea", name: "Koreanische Halbinsel", lat: 39.0, lon: 126.0, query: '("North Korea" OR Pyongyang) (missile OR nuclear)' },
+  { id: "eu-politik", name: "EU-Politik", lat: 50.85, lon: 4.35, query: '("European Union" OR Brussels OR "European Commission") (budget OR election OR crisis)' },
+  { id: "opec", name: "Öl und OPEC", lat: 24.5, lon: 54.4, query: '(OPEC OR "oil price" OR "crude oil") (supply OR output OR cut)' },
+  { id: "lateinamerika", name: "Lateinamerika", lat: -15.0, lon: -60.0, query: '(Argentina OR Brazil OR Venezuela OR Mexico) (election OR default OR protest OR crisis)' },
+  { id: "sahel", name: "Afrika und Sahel", lat: 14.0, lon: 2.0, query: '(Sahel OR Sudan OR Congo OR Nigeria) (coup OR conflict OR crisis)' },
+];
+
+export type Sector = { id: string; name: string; etf: string; members: string[] };
+
+// Sektoren des S&P 500 über die SPDR-Sektor-ETFs; die Mitglieder sind die größten Werte je Sektor.
+export const SECTORS: Sector[] = [
+  { id: "tech", name: "Technologie", etf: "XLK", members: ["AAPL", "MSFT", "NVDA", "AVGO", "ORCL", "CRM", "AMD", "ADBE"] },
+  { id: "comm", name: "Kommunikation", etf: "XLC", members: ["META", "GOOGL", "NFLX", "TMUS", "DIS", "VZ", "T"] },
+  { id: "disc", name: "Zyklischer Konsum", etf: "XLY", members: ["AMZN", "TSLA", "HD", "MCD", "BKNG", "LOW", "NKE"] },
+  { id: "fin", name: "Finanzen", etf: "XLF", members: ["BRK.B", "JPM", "V", "MA", "BAC", "WFC", "GS"] },
+  { id: "health", name: "Gesundheit", etf: "XLV", members: ["LLY", "UNH", "JNJ", "ABBV", "MRK", "TMO", "ISRG"] },
+  { id: "ind", name: "Industrie", etf: "XLI", members: ["GE", "CAT", "RTX", "UBER", "HON", "UNP", "BA"] },
+  { id: "staples", name: "Basiskonsum", etf: "XLP", members: ["COST", "WMT", "PG", "KO", "PEP", "PM"] },
+  { id: "energy", name: "Energie", etf: "XLE", members: ["XOM", "CVX", "COP", "EOG", "SLB", "PSX"] },
+  { id: "util", name: "Versorger", etf: "XLU", members: ["NEE", "SO", "DUK", "CEG", "AEP"] },
+  { id: "realestate", name: "Immobilien", etf: "XLRE", members: ["PLD", "AMT", "EQIX", "WELL", "SPG"] },
+  { id: "materials", name: "Grundstoffe", etf: "XLB", members: ["LIN", "SHW", "APD", "ECL", "FCX", "NEM"] },
+];
+
+// Makro-Reihen von FRED (keylos als CSV).
+export const MACRO_SERIES = [
+  { id: "VIXCLS", name: "VIX", unit: "Punkte", group: "Stimmung" },
+  { id: "BAMLH0A0HYM2", name: "Hochzins-Spread USA", unit: "%", group: "Stimmung" },
+  { id: "DGS10", name: "US-Rendite 10 J.", unit: "%", group: "Zinsen" },
+  { id: "DGS2", name: "US-Rendite 2 J.", unit: "%", group: "Zinsen" },
+  { id: "T10Y2Y", name: "Zinskurve 10J–2J", unit: "%-Pkt.", group: "Zinsen" },
+  { id: "DFII10", name: "US-Realzins 10 J.", unit: "%", group: "Zinsen" },
+  { id: "DCOILBRENTEU", name: "Brent", unit: "USD", group: "Rohstoffe" },
+  { id: "DHHNGSP", name: "Erdgas Henry Hub", unit: "USD", group: "Rohstoffe" },
+  { id: "DEXUSEU", name: "EUR/USD", unit: "USD", group: "Devisen" },
+  { id: "DEXJPUS", name: "USD/JPY", unit: "JPY", group: "Devisen" },
+  { id: "DEXCHUS", name: "USD/CNY", unit: "CNY", group: "Devisen" },
+  { id: "DTWEXBGS", name: "Dollar-Index (breit)", unit: "Index", group: "Devisen" },
+  { id: "SP500", name: "S&P 500", unit: "Punkte", group: "Indizes" },
+  { id: "NASDAQCOM", name: "Nasdaq Composite", unit: "Punkte", group: "Indizes" },
+  { id: "NIKKEI225", name: "Nikkei 225", unit: "Punkte", group: "Indizes" },
+] as const;

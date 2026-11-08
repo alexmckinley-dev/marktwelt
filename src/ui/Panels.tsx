@@ -289,7 +289,7 @@ export function CalendarPanel({ items, error, onStock }: { items: Earning[] | un
                 .map((e) => (
                   <tr key={e.symbol} onClick={() => onStock(e.symbol)}>
                     <td><b>{e.symbol}</b></td>
-                    <td className="dim small">{e.name.slice(0, 26)}</td>
+                    <td className="dim small">{e.name.length > 22 ? `${e.name.slice(0, 21)}…` : e.name}</td>
                     <td className="small">{e.time}</td>
                     <td className="dim small">{big(e.marketCap)}</td>
                   </tr>

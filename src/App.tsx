@@ -64,7 +64,7 @@ export default function App() {
   useEffect(() => {
     const onHash = () => {
       const v = fromHash();
-      setStack((s) => (toHash(s.at(-1)!) === toHash(v) ? s : [...s, v]));
+      setStack((s) => (toHash(s.at(-1)!) === toHash(v) ? s : v.k === "aktie" || v.k === "markt" ? [...s, v] : v.k === "welt" ? [v] : [{ k: "welt" }, v]));
     };
     addEventListener("hashchange", onHash);
     return () => removeEventListener("hashchange", onHash);
@@ -114,10 +114,10 @@ export default function App() {
     if (view.k === "stimmung") return moodOpen ? { pos: V(0, 3.5, 10), target: V(0, -0.8, 0), key: "s-open" } : { pos: V(0, 0.6, 7.5), target: V(0, 0, 0), key: "s" };
     if (view.k === "sektoren") {
       const f = sectorFocus(sectors.data, secSel);
-      if (f) return { pos: f.clone().multiplyScalar(1.75).add(V(0, 2.2, 0)), target: f, key: `sec-${secSel}` };
-      return secExploded ? { pos: V(0, 5, 9.5), target: V(0, 0, 0), key: "sec-open" } : { pos: V(0, 2.5, 6), target: V(0, 0, 0), key: "sec" };
+      if (f) return { pos: f.centre.clone().add(f.dir.clone().multiplyScalar(5)).add(V(0, 1, 0)), target: f.centre, key: `sec-${secSel}` };
+      return secExploded ? { pos: V(0, 6, 11), target: V(0, 0, 0), key: "sec-open" } : { pos: V(0, 2.8, 7.5), target: V(0, 0, 0), key: "sec" };
     }
-    if (view.k === "termine") return { pos: V(10, 3, 10), target: V(0, 0, 0), key: "t" };
+    if (view.k === "termine") return { pos: V(7.5, 2.5, 7.5), target: V(0, 0, 0), key: "t" };
     return cubeOpen ? { pos: V(4.6, 1.2, 7.5), target: V(4.6, 0.6, 0), key: "a-open" } : { pos: V(0.9, 1.4, 11.5), target: V(0.9, 0.2, 0), key: `a-${view.k}` };
   }, [view, globeSel, world.data, moodOpen, secExploded, secSel, sectors.data, cubeOpen]);
 

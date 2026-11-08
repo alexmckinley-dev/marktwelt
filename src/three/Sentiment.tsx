@@ -70,8 +70,8 @@ function Moon({
 }) {
   const [hover, bind] = useHover();
   const a = (i / n) * Math.PI * 2;
-  const to: [number, number, number] = [Math.cos(a) * 3.6, -0.6 + Math.sin(a) * 0.4 - 1.6, Math.sin(a) * 2.2];
-  const h = 0.1 + (part.score / 100) * 1.6;
+  const to: [number, number, number] = [Math.cos(a) * 4.3, -2.6, Math.sin(a) * 2.9];
+  const h = 0.05 + (part.score / 100) * 1.65;
   const c = moodColor(part.score);
   return (
     <Burst open={open} to={to} from={[0, -0.6, 0]} delay={i * 0.08}>
@@ -86,9 +86,9 @@ function Moon({
           <cylinderGeometry args={[0.16, 0.16, h, 24]} />
           <meshStandardMaterial color={c} emissive={c} emissiveIntensity={hover || selected ? 2 : 0.9} toneMapped={false} transparent opacity={0.9} />
         </mesh>
-        <mesh position={[0, 1.8, 0]}>
-          <cylinderGeometry args={[0.17, 0.17, 0.005, 24]} />
-          <meshBasicMaterial color="#5b6b7f" transparent opacity={0.6} />
+        <mesh position={[0, 0.85, 0]}>
+          <cylinderGeometry args={[0.2, 0.2, 1.7, 24, 1, true]} />
+          <meshBasicMaterial color="#46e0c8" transparent opacity={0.05} side={THREE.DoubleSide} depthWrite={false} toneMapped={false} />
         </mesh>
       </group>
       {open && (

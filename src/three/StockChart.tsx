@@ -163,13 +163,12 @@ export function MetricCube({ ind, open, setOpen }: { ind: Indicators | undefined
           <Burst key={t.id} open={open} to={[Math.cos(a) * 1.7, Math.sin(a) * 1.7, 0.2]} delay={i * 0.05}>
             <mesh>
               <planeGeometry args={[1.5, 0.9]} />
-              <meshStandardMaterial
-                color={t.tone === "pos" ? "#0f3b31" : t.tone === "neg" ? "#3b1220" : "#14263a"}
-                emissive={t.tone === "pos" ? "#2ee6a6" : t.tone === "neg" ? "#ff4d6d" : "#46e0c8"}
-                emissiveIntensity={0.18}
+              <meshBasicMaterial
+                color={t.tone === "pos" ? "#0c2a24" : t.tone === "neg" ? "#2a0e18" : "#0e1c2b"}
                 transparent
-                opacity={0.85}
+                opacity={0.82}
                 side={THREE.DoubleSide}
+                toneMapped={false}
               />
             </mesh>
             {open && (

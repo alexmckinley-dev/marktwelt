@@ -27,7 +27,7 @@ export const weekdayDe = (iso: string) =>
 /** Farbe für eine Tagesänderung in Prozent: Rot über Grau zu Grün. */
 export function changeColor(p: number | null | undefined) {
   if (p == null || !Number.isFinite(p)) return "#5b6b7f";
-  const t = Math.max(-1, Math.min(1, p / 3));
+  const t = Math.max(-1, Math.min(1, p / 2));
   if (t >= 0) return mix("#7d8da1", "#2ee6a6", Math.sqrt(t));
   return mix("#7d8da1", "#ff4d6d", Math.sqrt(-t));
 }

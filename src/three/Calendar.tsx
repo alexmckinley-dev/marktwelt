@@ -58,7 +58,7 @@ export function CalendarScene({ items, onOpen }: { items: Earning[] | undefined;
       {n > 0 && <Line points={spine} color="#2f8fa3" lineWidth={1.5} transparent opacity={0.6} />}
       {days.map(([d, list], i) => {
         const c = at(i);
-        const top = list.slice(0, 14);
+        const top = list.slice(0, 15);
         return (
           <group key={d}>
             <mesh position={c} rotation={[-Math.PI / 2, 0, 0]}>
@@ -69,8 +69,8 @@ export function CalendarScene({ items, onOpen }: { items: Earning[] | undefined;
               <b>{weekdayDe(d)}</b> · {list.length}
             </Label>
             {top.map((e, k) => {
-              const a = i * TURN + ((k % 7) - 3) * 0.075;
-              const rr = RAD - 0.55 - Math.floor(k / 7) * 0.6;
+              const a = i * TURN + ((k % 5) - 2) * 0.12;
+              const rr = RAD - 0.6 - Math.floor(k / 5) * 0.65;
               const p = new THREE.Vector3(Math.cos(a) * rr, i * RISE + ((k % 2) - 0.5) * 0.18, Math.sin(a) * rr);
               return <Company key={e.symbol} e={e} pos={p} onOpen={() => onOpen(e.symbol)} />;
             })}

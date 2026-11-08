@@ -73,6 +73,7 @@ td, th { padding: 4px 6px; text-align: left; border-bottom: 1px solid rgba(255, 
 th { font-size: 11px; color: var(--dim); font-weight: 500; }
 td:last-child, th:last-child { text-align: right; }
 table.click tr { cursor: pointer; }
+table.click td { white-space: nowrap; }
 table.click tbody tr:hover { background: rgba(70, 224, 200, 0.07); }
 
 .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }

@@ -15,11 +15,9 @@ function Wedge({ phi, len, color, glow }: { phi: number; len: number; color: str
       color={color}
       emissive={color}
       emissiveIntensity={glow}
-      roughness={0.35}
-      metalness={0.2}
+      roughness={0.65}
+      metalness={0}
       toneMapped={false}
-      transparent
-      opacity={0.93}
       side={THREE.DoubleSide}
     />
   );
@@ -47,6 +45,7 @@ function SectorSlice({
   count,
   exploded,
   selected,
+  dimmed,
   onClick,
 }: {
   sector: Sector;
@@ -54,6 +53,7 @@ function SectorSlice({
   count: number;
   exploded: boolean;
   selected: boolean;
+  dimmed: boolean;
   onClick: () => void;
 }) {
   const [hover, bind] = useHover();
@@ -65,11 +65,11 @@ function SectorSlice({
   const q = ok(sector.quote) ? sector.quote : null;
   const color = changeColor(q?.changePct);
   const g = useRef<THREE.Group>(null);
-  const dist = selected ? 2.2 : exploded ? 0.9 : 0;
+  const dist = selected ? 2.2 : exploded ? 1.3 : 0;
   useFrame((_, dt) => {
     if (!g.current) return;
     g.current.position.lerp(dir.clone().multiplyScalar(dist), Math.min(1, dt * 4));
-    const s = hover ? 1.04 : 1;
+    const s = dimmed ? 0.55 : hover ? 1.04 : 1;
     g.current.scale.lerp(new THREE.Vector3(s, s, s), Math.min(1, dt * 8));
   });
   return (
@@ -83,7 +83,7 @@ function SectorSlice({
       >
         <Wedge phi={phi} len={len} color={color} glow={hover || selected ? 0.9 : 0.35} />
       </group>
-      {(exploded || hover) && (
+      {(selected || hover || (exploded && !dimmed)) && (
         <Label position={dir.clone().multiplyScalar(RAD + 0.35).setY(0.0)}>
           <b>{sector.name}</b>
           <br />
@@ -112,7 +112,7 @@ function MemberOrb({
   onOpen: () => void;
 }) {
   const [hover, bind] = useHover();
-  const r = cap ? Math.max(0.09, Math.min(0.42, Math.cbrt(cap / 1e12) * 0.3)) : 0.1;
+  const r = cap ? Math.max(0.08, Math.min(0.3, Math.cbrt(cap / 1e12) * 0.18)) : 0.09;
   const color = changeColor(quote?.changePct);
   return (
     <Burst open={open} to={to} delay={delay}>
@@ -156,11 +156,11 @@ export function SectorsScene({
   const list = sectors ?? [];
   const selIndex = list.findIndex((s) => s.id === selected);
   const members = detail && detail.id === selected ? detail.members : [];
-  const centre = useMemo(() => {
-    if (selIndex < 0) return new THREE.Vector3();
-    const full = (Math.PI * 2) / list.length;
-    return dirOf(selIndex * full + full / 2).multiplyScalar(2.2 + RAD + 1.3);
-  }, [selIndex, list.length]);
+  const focus = sectorFocus(sectors, selected);
+  const ringQ = useMemo(
+    () => (focus ? new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), focus.dir) : new THREE.Quaternion()),
+    [focus?.dir.x, focus?.dir.z],
+  );
   const spyColor = changeColor(spy?.changePct);
   return (
     <group onPointerMissed={() => onSelect(null)}>
@@ -172,6 +172,7 @@ export function SectorsScene({
           count={list.length}
           exploded={exploded || !!selected}
           selected={s.id === selected}
+          dimmed={!!selected && s.id !== selected}
           onClick={() => {
             if (!exploded) setExploded(true);
             else onSelect(s.id === selected ? null : s.id);
@@ -189,25 +190,25 @@ export function SectorsScene({
         <sphereGeometry args={[exploded ? 0.55 : 0.3, 48, 48]} />
         <meshStandardMaterial color={spyColor} emissive={spyColor} emissiveIntensity={hoverCore ? 2.2 : 1.2} toneMapped={false} />
       </mesh>
-      {exploded && (
+      {exploded && !selected && (
         <Label position={[0, 0.85, 0]}>
           <b>S&amp;P 500</b> <span style={{ color: spyColor }}>{pct(spy?.changePct, 2, false)}</span>
           <br />
           <small>Kern anklicken zum Schließen</small>
         </Label>
       )}
-      {selected && (
-        <group position={centre}>
+      {selected && focus && (
+        <group position={focus.centre} quaternion={ringQ}>
           {members.map((m, i) => {
             const a = (i / Math.max(1, members.length)) * Math.PI * 2;
-            const rr = 1.15;
+            const rr = 1.5;
             return (
               <MemberOrb
                 key={m.symbol}
                 symbol={m.symbol}
                 quote={ok(m.quote) ? m.quote : null}
                 cap={parseBig(m.marketCap)}
-                to={[Math.cos(a) * rr, Math.sin(a) * rr * 0.8, Math.sin(a) * 0.3]}
+                to={[Math.cos(a) * rr, Math.sin(a) * rr, 0]}
                 delay={i * 0.05}
                 open
                 onOpen={() => onStock(m.symbol)}
@@ -226,5 +227,6 @@ export function sectorFocus(sectors: Sector[] | undefined, selected: string | nu
   const i = list.findIndex((s) => s.id === selected);
   if (i < 0) return null;
   const full = (Math.PI * 2) / list.length;
-  return dirOf(i * full + full / 2).multiplyScalar(2.2 + RAD + 1.3);
+  const dir = dirOf(i * full + full / 2);
+  return { dir, centre: dir.clone().multiplyScalar(2.2 + RAD + 1.2) };
 }

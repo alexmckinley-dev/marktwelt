@@ -246,11 +246,35 @@ async function fixNames(ls: (Leader | null | undefined)[]) {
   }
 }
 
+/** Sitzverteilung der größten Kammer aus Wikidata; nur, wenn die Summe zur Kammergröße passt. */
+function parliament(iso3: string) {
+  return cached(`land-parl:${iso3}`, DAY, async () => {
+    const q = `SELECT ?leg ?legLabel ?size ?p ?pLabel ?n ?t ?col WHERE { ?c wdt:P298 "${iso3}". FILTER NOT EXISTS { ?c wdt:P576 ?x } ?c wdt:P194 ?l0. ?l0 wdt:P527* ?leg. OPTIONAL { ?leg wdt:P1342 ?size } ?p p:P1410 ?st. ?st ps:P1410 ?n; pq:P194 ?leg. ?p wdt:P31/wdt:P279* wd:Q7278. FILTER NOT EXISTS { ?st pq:P582 ?e } OPTIONAL { ?st pq:P585 ?t } OPTIONAL { ?p wdt:P465 ?col } ${LABEL} }`;
+    const d = await wd(q);
+    const chambers = new Map<string, { name: string; size: number | null; parties: Map<string, { name: string; seats: number; color: string | null; t: string }> }>();
+    for (const b of d.results.bindings) {
+      const c = chambers.get(b.leg.value) ?? { name: b.legLabel.value, size: b.size ? Number(b.size.value) : null, parties: new Map() };
+      chambers.set(b.leg.value, c);
+      const t = b.t?.value ?? "";
+      const cur = c.parties.get(b.p.value);
+      if (!cur || t > cur.t) c.parties.set(b.p.value, { name: b.pLabel.value, seats: Math.round(Number(b.n.value)), color: b.col ? `#${b.col.value}` : null, t });
+    }
+    const list = [...chambers.values()]
+      .map((c) => {
+        const parties = [...c.parties.values()].filter((p) => p.seats > 0).sort((a, b) => b.seats - a.seats);
+        const sum = parties.reduce((s, p) => s + p.seats, 0);
+        return { name: c.name, size: c.size, sum, complete: !!c.size && sum >= c.size * 0.85 && sum <= c.size * 1.03, parties: parties.map(({ name, seats, color }) => ({ name, seats, color })) };
+      })
+      .sort((a, b) => (b.size ?? b.sum) - (a.size ?? a.sum));
+    return list.find((c) => c.complete) ?? list[0] ?? null;
+  });
+}
+
 export async function landDetail(iso3: string) {
   const code = iso3.toUpperCase();
   const geo = await landGeo(code);
   const ids = geo.regions.map((r) => r.wd).filter(Boolean) as string[];
-  const [heads, nation] = await Promise.allSettled([regionHeads(code, ids), nationalHeads(code)]);
+  const [heads, nation, parl] = await Promise.allSettled([regionHeads(code, ids), nationalHeads(code), parliament(code)]);
   const h = heads.status === "fulfilled" ? heads.value : {};
   if (nation.status === "fulfilled") await fixNames([nation.value.state, nation.value.government, ...Object.values(h)]);
   return {
@@ -258,6 +282,7 @@ export async function landDetail(iso3: string) {
     name: deName(code),
     regions: geo.regions.map((r) => ({ ...r, head: (r.wd && h[r.wd]) || null })),
     nation: nation.status === "fulfilled" ? nation.value : null,
+    parliament: parl.status === "fulfilled" ? parl.value : null,
     errors: [heads, nation].flatMap((r) => (r.status === "rejected" ? [`Wikidata: ${(r.reason as Error).message.split(" ")[0]}`] : [])),
   };
 }

@@ -150,3 +150,7 @@ footer { border-top: 1px solid var(--line); background: rgba(3, 8, 18, 0.92); z-
 .chip:hover { background: rgba(255, 255, 255, 0.08); }
 .closebtn { background: none; border: 0; color: var(--accent); font: inherit; font-size: 12px; cursor: pointer; padding: 0; margin: 0 0 8px; }
 .closebtn:hover { text-decoration: underline; }
+
+.mixbar { display: flex; height: 12px; border-radius: 3px; overflow: hidden; margin: 6px 0; }
+.mixbar span { display: block; }
+.lapse input[type="range"] { accent-color: var(--accent, #46e0c8); }

@@ -283,5 +283,33 @@ export type Land = {
   road: number[][];
   cities: { name: string; lat: number; lon: number; pop: number }[];
   nation: { state: Leader | null; government: Leader | null; forms: string[] } | null;
+  parliament: { name: string; size: number | null; sum: number; complete: boolean; parties: { name: string; seats: number; color: string | null }[] } | null;
   errors: string[];
 };
+
+export type Transit = { id: string | null; name: string; last: string; avg7: number; base: number; change: number | null; tanker7: number; series: [string, number][] };
+export type Traffic = { items: Transit[]; asOf: string | null };
+/** [lon, lat, Kurs, Höhe m, Tempo m/s] */
+export type Flights = { time: string; flights: [number, number, number, number, number][]; top: [string, number][] };
+export type SpaceWeather = {
+  kp: number | null;
+  kpMax24: number | null;
+  forecast: { time: string; kp: number }[];
+  scales: { R: number; S: number; G: number } | null;
+  auroraTime: string;
+  aurora: [number, number, number][];
+};
+export type Cables = { cables: { id: string; name: string; color: string; lines: number[][] }[]; asOf: string };
+export type EventHistory = { events: GeoEvent[]; from: string; to: string };
+export type Power = {
+  time: string;
+  mix: { name: string; color: string; mw: number }[];
+  generation: number;
+  load: number | null;
+  import: number | null;
+  renewableShare: number | null;
+  price: number | null;
+  priceAt: string | null;
+  series: [number, number, number][];
+};
+export type Pegel = { items: { id: string; name: string; water: string; lat: number; lon: number; cm: number; time: string | null; state: string; ship: string }[]; asOf: string };

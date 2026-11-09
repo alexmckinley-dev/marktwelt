@@ -3,13 +3,13 @@
 import { useFrame } from "@react-three/fiber";
 import { useLayoutEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
-import type { Baustelle, ElectionArea, GermanyBase, GermanyNet, Ring } from "../api";
+import type { Baustelle, ElectionArea, GermanyBase, GermanyNet, Pegel, Ring } from "../api";
 import { mix } from "../format";
 import { Label, useHover } from "./common";
 
-export type DeLayers = { wahl: boolean; bahn: boolean; autobahn: boolean; bundes: boolean; baustellen: boolean; staedte: boolean };
+export type DeLayers = { wahl: boolean; bahn: boolean; autobahn: boolean; bundes: boolean; baustellen: boolean; staedte: boolean; pegel: boolean };
 export type DeMode = "bund" | "land";
-export type DeSel = { type: "wk" | "city" | "bau"; id: string } | null;
+export type DeSel = { type: "wk" | "city" | "bau" | "pegel"; id: string } | null;
 
 const K = 1.0;
 export type Proj = (lon: number, lat: number) => [number, number];
@@ -273,10 +273,63 @@ export function Cities({
   );
 }
 
+export const PEGEL_COLOR: Record<string, string> = { low: "#ffd166", normal: "#7fd6ff", high: "#ff3b4f" };
+export const PEGEL_DE: Record<string, string> = { low: "niedrig", normal: "normal", high: "hoch" };
+
+/** Pegel als kleine Kugeln: gelb unter mittlerem Niedrigwasser, rot über mittlerem Hochwasser. */
+function Gauges({ items, sel, onSelect }: { items: Pegel["items"]; sel: DeSel; onSelect: (s: DeSel) => void }) {
+  const ref = useRef<THREE.InstancedMesh>(null);
+  const [hover, bind] = useHover();
+  const hoverId = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    const m = ref.current;
+    if (!m) return;
+    const o = new THREE.Object3D();
+    const c = new THREE.Color();
+    items.forEach((g, i) => {
+      const [x, z] = proj(g.lon, g.lat);
+      o.position.set(x, TILE_H + 0.03, z);
+      o.scale.setScalar(sel?.type === "pegel" && sel.id === g.id ? 2.4 : g.state === "normal" || !PEGEL_COLOR[g.state] ? 0.8 : 1.3);
+      o.updateMatrix();
+      m.setMatrixAt(i, o.matrix);
+      m.setColorAt(i, c.set(PEGEL_COLOR[g.state] ?? "#5a6878"));
+    });
+    m.instanceMatrix.needsUpdate = true;
+    if (m.instanceColor) m.instanceColor.needsUpdate = true;
+  }, [items, sel]);
+  const h = hover && hoverId.current != null ? items[hoverId.current] : null;
+  return (
+    <>
+      <instancedMesh
+        key={items.length}
+        ref={ref}
+        args={[undefined, undefined, items.length]}
+        {...bind}
+        onPointerMove={(e) => {
+          hoverId.current = e.instanceId ?? null;
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (e.instanceId != null) onSelect({ type: "pegel", id: items[e.instanceId].id });
+        }}
+      >
+        <sphereGeometry args={[0.016, 10, 8]} />
+        <meshBasicMaterial toneMapped={false} />
+      </instancedMesh>
+      {h && (
+        <Label position={[proj(h.lon, h.lat)[0], TILE_H + 0.12, proj(h.lon, h.lat)[1]]} className="small">
+          <b>{h.name}</b> ({h.water}) {h.cm} cm
+        </Label>
+      )}
+    </>
+  );
+}
+
 export function GermanyScene({
   base,
   net,
   works,
+  pegel,
   layers,
   mode,
   sel,
@@ -285,6 +338,7 @@ export function GermanyScene({
   base: GermanyBase | undefined;
   net: GermanyNet | undefined;
   works: Baustelle[] | undefined;
+  pegel?: Pegel["items"];
   layers: DeLayers;
   mode: DeMode;
   sel: DeSel;
@@ -321,6 +375,7 @@ export function GermanyScene({
       {net && layers.bahn && <Lines lines={net.bahn} color="#ffb347" y={TILE_H + 0.01} opacity={0.95} />}
       {works && layers.baustellen && <Roadworks items={works} sel={sel} onSelect={onSelect} />}
       {layers.staedte && <Cities cities={base.cities} sel={sel} onSelect={onSelect} />}
+      {pegel && layers.pegel && <Gauges items={pegel} sel={sel} onSelect={onSelect} />}
     </group>
   );
 }

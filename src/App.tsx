@@ -24,6 +24,13 @@ import {
   type GermanyNet,
   type Baustellen,
   type Land,
+  type Traffic,
+  type Flights,
+  type SpaceWeather,
+  type Cables,
+  type EventHistory,
+  type Power,
+  type Pegel,
 } from "./api";
 import { CalendarScene } from "./three/Calendar";
 import { CameraRig, PanelOffset, Starfield, latLon } from "./three/common";
@@ -37,6 +44,8 @@ import { CandleChart, MetricCube } from "./three/StockChart";
 import { CalendarPanel, LAGE_VIEWS, LagePanel, MacroStrip, SectorsPanel, StockPanel, WorldPanel } from "./ui/Panels";
 import { BodyPanel, GermanyPanel, SatControl, SatPanel } from "./ui/SpacePanels";
 import { LandPanel } from "./ui/LandPanel";
+import { LiveCtx } from "./ui/LivePanels";
+import { AuroraLayer, CableLayer, FlightLayer, TimelapseLayer } from "./three/Live";
 
 type View =
   | { k: "welt" }
@@ -100,7 +109,12 @@ export default function App() {
     launches: true,
     mood: true,
     sats: true,
+    flights: true,
+    aurora: true,
+    cables: true,
   });
+  const [lapse, setLapse] = useState<number | null>(null);
+  const [lapsePlaying, setLapsePlaying] = useState(false);
   const [satShow, setSatShow] = useState<Record<string, boolean>>({});
   const [satFocus, setSatFocus] = useState<string | null>(null);
   const satCtl = useMemo(() => ({ show: satShow, setShow: (id: string, v: boolean) => setSatShow((x) => ({ ...x, [id]: v })), focus: satFocus, setFocus: setSatFocus }), [satShow, satFocus]);
@@ -113,7 +127,7 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [satState, setSatState] = useState<SatState | null>(null);
   const [exploding, setExploding] = useState(false);
-  const [deLayers, setDeLayers] = useState<DeLayers>({ wahl: true, bahn: true, autobahn: true, bundes: false, baustellen: true, staedte: true });
+  const [deLayers, setDeLayers] = useState<DeLayers>({ wahl: true, bahn: true, autobahn: true, bundes: false, baustellen: true, staedte: true, pegel: true });
   const [deMode, setDeMode] = useState<DeMode>("bund");
   const [deSel, setDeSel] = useState<DeSel>(null);
   const [landLayers, setLandLayers] = useState<LandLayers>({ regionen: true, bahn: true, autobahn: true, strassen: false, staedte: true });
@@ -159,12 +173,39 @@ export default function App() {
   const market = useApi<MarketDetail>(marketId ? `market/${marketId}` : null);
   const stock = useApi<Stock>(view.k === "aktie" ? `stock/${encodeURIComponent(view.symbol)}` : null);
   const sats = useApi<Satellites>(view.k === "welt" ? "satellites" : null, 6 * 3600_000);
+  const traffic = useApi<Traffic>(view.k === "welt" ? "engpaesse" : null, 6 * 3600_000);
+  const flights = useApi<Flights>(view.k === "welt" && layers.flights ? "fluege" : null, 15 * 60_000);
+  const weather = useApi<SpaceWeather>(view.k === "welt" ? "weltraumwetter" : null, 15 * 60_000);
+  const cables = useApi<Cables>(view.k === "welt" && layers.cables ? "kabel" : null);
+  const evHistory = useApi<EventHistory>(lapse != null ? "ereignisse-30" : null, 60 * 60_000);
+  const live = useMemo(
+    () => ({ traffic: traffic.data, flights: flights.data, weather: weather.data, cables: cables.data, history: evHistory.data, lapse, setLapse, playing: lapsePlaying, setPlaying: setLapsePlaying }),
+    [traffic.data, flights.data, weather.data, cables.data, evHistory.data, lapse, lapsePlaying],
+  );
+  // Zeitraffer: ein Tag je Sekunde, am Ende anhalten.
+  useEffect(() => {
+    if (!lapsePlaying || lapse == null) return;
+    const end = evHistory.data ? new Date(evHistory.data.to).getTime() : Date.now();
+    const id = window.setInterval(() => {
+      setLapse((t) => {
+        const n = (t ?? 0) + 86400_000 / 20;
+        if (n >= end) {
+          setLapsePlaying(false);
+          return end;
+        }
+        return n;
+      });
+    }, 50);
+    return () => clearInterval(id);
+  }, [lapsePlaying, evHistory.data, lapse == null]);
   const deWanted = view.k === "deutschland" || explodeTo === "DEU";
   const landIso = view.k === "land" ? view.iso3 : explodeTo && explodeTo !== "DEU" ? explodeTo : null;
   const land = useApi<Land>(landIso ? `land/${landIso}` : null);
   const deBase = useApi<GermanyBase>(deWanted ? "de/base" : null);
   const deNet = useApi<GermanyNet>(deWanted ? "de/netz" : null);
   const deWorks = useApi<Baustellen>(deWanted ? "de/baustellen" : null, 30 * 60_000);
+  const dePower = useApi<Power>(view.k === "deutschland" ? "de/strom" : null, 15 * 60_000);
+  const dePegel = useApi<Pegel>(deWanted ? "de/pegel" : null, 15 * 60_000);
 
   useEffect(() => setCubeOpen(false), [view]);
 
@@ -294,6 +335,9 @@ export default function App() {
                 ["launches", "Raketenstarts"],
                 ["mood", "Stimmungsmond"],
                 ["sats", "Satelliten"],
+                ["flights", "Flugzeuge"],
+                ["aurora", "Polarlicht"],
+                ["cables", "Seekabel"],
               ] as const
             ).map(([k, n]) => (
               <label key={k}>
@@ -322,7 +366,8 @@ export default function App() {
           <CameraRig position={cam.pos} target={cam.target} flyKey={cam.key} />
 
           {view.k === "welt" && (
-            <Globe world={world.data} heat={heat.data} predictions={preds.data} events={evts.data?.events}
+            <Globe world={world.data} heat={heat.data} predictions={preds.data} events={lapse == null ? evts.data?.events : undefined}
+              traffic={traffic.data?.items}
               overview={overview.data}
               launches={launches.data?.sites}
               mood={mood.data}
@@ -331,13 +376,17 @@ export default function App() {
           )}
           {view.k === "welt" && !exploding && (
             <>
+              {layers.flights && <FlightLayer data={flights.data} />}
+              {layers.aurora && <AuroraLayer data={weather.data} />}
+              {layers.cables && <CableLayer data={cables.data} />}
+              {lapse != null && evHistory.data && <TimelapseLayer events={evHistory.data.events} t={lapse} />}
               {layers.sats && <SatelliteLayer data={sats.data} sel={globeSel} onSelect={selectGlobe} onState={setSatState} show={satShow} focus={satFocus} />}
               <SolarSystem sel={globeSel} onSelect={selectGlobe} />
               <Jwst selected={globeSel?.type === "body" && globeSel.id === "jwst"} onClick={() => selectGlobe({ type: "body", id: "jwst" })} />
             </>
           )}
           {view.k === "deutschland" && (
-            <GermanyScene base={deBase.data} net={deNet.data} works={deWorks.data?.items} layers={deLayers} mode={deMode} sel={deSel} onSelect={setDeSel} />
+            <GermanyScene base={deBase.data} net={deNet.data} works={deWorks.data?.items} pegel={dePegel.data?.items} layers={deLayers} mode={deMode} sel={deSel} onSelect={setDeSel} />
           )}
           {view.k === "land" && <CountryScene key={view.iso3} data={land.data?.iso3 === view.iso3 ? land.data : undefined} layers={landLayers} sel={landSel} onSelect={setLandSel} />}
           {view.k === "sektoren" && (
@@ -367,6 +416,7 @@ export default function App() {
 
         {view.k === "lage" && <LageMap layers={lageLayers} view={lageView} />}
 
+        <LiveCtx.Provider value={live}>
         <SatControl.Provider value={satCtl}>
         <aside>
           {view.k === "lage" && <LagePanel layers={lageLayers} setLayers={setLageLayers} view={lageView} setView={setLageView} />}
@@ -390,6 +440,8 @@ export default function App() {
             <GermanyPanel
               base={deBase.data}
               works={deWorks.data}
+              power={dePower.data}
+              pegel={dePegel.data}
               netReady={!!deNet.data}
               layers={deLayers}
               setLayers={setDeLayers}
@@ -456,11 +508,12 @@ export default function App() {
           )}
         </aside>
         </SatControl.Provider>
+        </LiveCtx.Provider>
       </main>
 
       <footer>
         <MacroStrip data={macro.data} />
-        <div className="src dim">Daten: Nasdaq (Kurse, verzögert), FRED, EZB, BIS, Cboe, GDELT, Polymarket, Hyperliquid, CME über Yahoo, USGS, GDACS, Weltbank, Wikipedia, Wikidata, Natural Earth, GeoNames, CelesTrak, Launch Library 2, Google News, Lagekarte von World Monitor · keine Anlageberatung</div>
+        <div className="src dim">Daten: Nasdaq (Kurse, verzögert), FRED, EZB, BIS, Cboe, GDELT, Polymarket, Hyperliquid, CME über Yahoo, USGS, GDACS, Weltbank, Wikipedia, Wikidata, Energy-Charts, PEGELONLINE, Natural Earth, GeoNames, CelesTrak, IMF PortWatch, OpenSky, NOAA SWPC, TeleGeography, Launch Library 2, Google News, Lagekarte von World Monitor · keine Anlageberatung</div>
       </footer>
     </div>
   );

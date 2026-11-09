@@ -1,8 +1,9 @@
 // Panels für Satelliten, Himmelskörper und die Deutschlandkarte.
 import { createContext, useContext, useMemo } from "react";
-import type { Baustellen, GermanyBase, Satellites } from "../api";
+import type { Baustellen, GermanyBase, Pegel, Power, Satellites } from "../api";
 import { fmt } from "../format";
-import { type DeLayers, type DeMode, type DeSel, partyColor, sameLand, shortParty, winner } from "../three/Germany";
+import { type DeLayers, type DeMode, type DeSel, PEGEL_COLOR, PEGEL_DE, partyColor, sameLand, shortParty, winner } from "../three/Germany";
+import { Spark } from "./Spark";
 import { BODIES, helio, type SatState } from "../three/Space";
 
 const AU_KM = 149_597_870.7;
@@ -205,9 +206,71 @@ function PartyBars({ parties, max = 7 }: { parties: { name: string; pct2: number
   );
 }
 
+function PowerBlock({ p }: { p: Power }) {
+  const gw = (mw: number) => `${fmt(mw / 1000, 1)} GW`;
+  const top = p.mix[0];
+  return (
+    <>
+      <h3>Strom jetzt</h3>
+      <p>
+        {new Date(p.time).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })} Uhr: Erzeugung {gw(p.generation)}, Verbrauch {p.load != null ? gw(p.load) : "–"}
+        {p.import != null && Math.abs(p.import) > 500 ? `, ${p.import > 0 ? "Import" : "Export"} ${gw(Math.abs(p.import))}` : ""}. Erneuerbar {fmt(p.renewableShare, 0)} %, am meisten liefert{" "}
+        {top?.name}. {p.price != null && <>Börsenpreis {fmt(p.price / 10, 1)} ct/kWh ({fmt(p.price, 0)} €/MWh).</>}
+      </p>
+      <div className="mixbar">
+        {p.mix.map((m) => (
+          <span key={m.name} style={{ flex: m.mw, background: m.color }} title={`${m.name}: ${gw(m.mw)}`} />
+        ))}
+      </div>
+      <p className="dim small">
+        {p.mix.map((m) => (
+          <span key={m.name} style={{ marginRight: 8 }}>
+            <span style={{ color: m.color }}>●</span> {m.name} {fmt((m.mw / p.generation) * 100, 0)} %
+          </span>
+        ))}
+      </p>
+      <Spark points={p.series.map((x) => x[2] / (x[1] || 1))} width={300} height={36} color="#7fd6ff" />
+      <p className="dim small">Linie: Anteil von Wind und Sonne an der Last seit Mitternacht. Quelle: Energy-Charts des Fraunhofer ISE, Viertelstundenwerte; Preis Day-Ahead DE-LU.</p>
+    </>
+  );
+}
+
+function PegelBlock({ p, onSel }: { p: Pegel; onSel: (s: DeSel) => void }) {
+  const low = p.items.filter((g) => g.state === "low");
+  const high = p.items.filter((g) => g.state === "high");
+  const kaub = p.items.find((g) => g.name === "Kaub");
+  return (
+    <>
+      <h3>Pegel</h3>
+      <p>
+        {p.items.length} Pegel an Bundeswasserstraßen: {low.length} unter mittlerem Niedrigwasser, {high.length} über mittlerem Hochwasser.
+        {kaub && <> Kaub am Rhein, Richtwert für die Binnenschifffahrt: {kaub.cm} cm{kaub.cm < 100 ? ", Frachter fahren nur teilbeladen" : ""}.</>}
+      </p>
+      {high.length > 0 && (
+        <table className="click">
+          <tbody>
+            {high.slice(0, 6).map((g) => (
+              <tr key={g.id} onClick={() => onSel({ type: "pegel", id: g.id })}>
+                <td>
+                  <span style={{ color: PEGEL_COLOR.high }}>●</span> {g.name}
+                </td>
+                <td className="dim">{g.water}</td>
+                <td>{g.cm} cm</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <p className="dim small">PEGELONLINE, alle 15 Minuten. Gelb: niedrig, rot: hoch. Gut die Hälfte der Pegel hat keine Einordnung und erscheint grau.</p>
+    </>
+  );
+}
+
 export function GermanyPanel({
   base,
   works,
+  power,
+  pegel,
   netReady,
   layers,
   setLayers,
@@ -218,6 +281,8 @@ export function GermanyPanel({
 }: {
   base: GermanyBase | undefined;
   works: Baustellen | undefined;
+  power?: Power;
+  pegel?: Pegel;
   netReady: boolean;
   layers: DeLayers;
   setLayers: (l: DeLayers) => void;
@@ -243,6 +308,7 @@ export function GermanyPanel({
             ["bundes", "Bundesstraßen"],
             ["baustellen", "Baustellen"],
             ["staedte", "Städte"],
+            ["pegel", "Pegel"],
           ] as const
         ).map(([k, n]) => (
           <label key={k} className="chip">
@@ -291,6 +357,27 @@ export function GermanyPanel({
         <p className="dim small">Quelle: GeoNames (cities15000). Einwohnerzahlen sind teils einige Jahre alt.</p>
       </>
     );
+  }
+  if (sel?.type === "pegel") {
+    const g = pegel?.items.find((x) => x.id === sel.id);
+    if (g)
+      return (
+        <>
+          {back}
+          <h2>{g.name}</h2>
+          <p className="dim">Pegel an der {g.water}</p>
+          <div className="hero">
+            {fmt(g.cm, 0)} <small>cm</small>
+          </div>
+          <p>
+            Wasserstand {PEGEL_DE[g.state] ? <b style={{ color: PEGEL_COLOR[g.state] }}>{PEGEL_DE[g.state]}</b> : "ohne Einordnung"}
+            {g.state === "low" && ", unter dem mittleren Niedrigwasser"}
+            {g.state === "high" && ", über dem mittleren Hochwasser"}.
+            {g.ship === "high" && " Über dem höchsten Schifffahrtswasserstand: Schifffahrt eingeschränkt."}
+          </p>
+          {g.time && <p className="dim small">Messung {new Date(g.time).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })}. Quelle: PEGELONLINE der Wasserstraßen- und Schifffahrtsverwaltung.</p>}
+        </>
+      );
   }
   if (sel?.type === "bau") {
     const b = works?.items.find((x) => x.id === sel.id);
@@ -349,6 +436,8 @@ export function GermanyPanel({
           Die {base.cities.length} Städte ab 20.000 Einwohnern zählen zusammen {fmt(total / 1e6, 1)} Mio. Menschen.
         </p>
       </div>
+      {power && <PowerBlock p={power} />}
+      {pegel && <PegelBlock p={pegel} onSel={onSel} />}
       {mode === "bund" && bund && (
         <>
           <h3>Zweitstimmen bundesweit</h3>

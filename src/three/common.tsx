@@ -1,6 +1,6 @@
-import { Html } from "@react-three/drei";
+import { createRoot, type Root } from "react-dom/client";
 import { useFrame, useThree } from "@react-three/fiber";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as THREE from "three";
 
 export function latLon(lat: number, lon: number, r: number) {
@@ -71,6 +71,11 @@ export function Burst({
   );
 }
 
+/**
+ * HTML-Beschriftung an einem Punkt der Szene. Eigene schlanke Fassung statt drei/Html: Diese baute
+ * ihre React-Wurzel synchron im Aufräumen ab und entfernte Knoten, die schon weg waren
+ * („removeChild“ und „synchronously unmount a root“ in der Konsole).
+ */
 export function Label({
   children,
   position = [0, 0, 0],
@@ -82,13 +87,52 @@ export function Label({
   className?: string;
   onClick?: () => void;
 }) {
-  return (
-    <Html position={position} center zIndexRange={[20, 0]} style={{ pointerEvents: onClick ? "auto" : "none" }}>
-      <div className={`label3d ${className}`} onClick={onClick}>
+  const group = useRef<THREE.Group>(null);
+  const { gl, camera, size, events } = useThree();
+  const el = useRef<HTMLDivElement | null>(null);
+  const root = useRef<Root | null>(null);
+  const render = () =>
+    root.current?.render(
+      <div className={`label3d ${className}`} onClick={onClick} style={{ position: "absolute", transform: "translate3d(-50%,-50%,0)", pointerEvents: onClick ? "auto" : "none" }}>
         {children}
-      </div>
-    </Html>
-  );
+      </div>,
+    );
+  useLayoutEffect(() => {
+    // je Einhängen ein frischer Knoten mit eigener Wurzel; die alte wird nach dem Rendern abgebaut
+    const target = (events.connected as HTMLElement | undefined) ?? (gl.domElement.parentNode as HTMLElement | null);
+    const d = document.createElement("div");
+    d.style.cssText = "position:absolute;top:0;left:0;z-index:20;pointer-events:none;will-change:transform;display:none;";
+    target?.appendChild(d);
+    const r = createRoot(d);
+    el.current = d;
+    root.current = r;
+    render();
+    return () => {
+      if (root.current === r) root.current = null;
+      if (el.current === d) el.current = null;
+      d.remove();
+      setTimeout(() => r.unmount(), 0);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gl, events.connected]);
+  useLayoutEffect(() => {
+    render();
+  });
+  const v = useMemo(() => new THREE.Vector3(), []);
+  useFrame(() => {
+    const g = group.current;
+    const e = el.current;
+    if (!g || !e) return;
+    g.getWorldPosition(v).project(camera);
+    // hinter der Kamera ausblenden
+    if (v.z > 1 || v.z < -1) {
+      e.style.display = "none";
+      return;
+    }
+    e.style.display = "";
+    e.style.transform = `translate3d(${((v.x + 1) / 2) * size.width}px,${((1 - v.y) / 2) * size.height}px,0)`;
+  });
+  return <group ref={group} position={position as [number, number, number]} />;
 }
 
 /** Hover-Zustand plus Mauszeiger für ein klickbares 3D-Objekt. */

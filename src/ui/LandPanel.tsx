@@ -1,10 +1,108 @@
 // Seitenleiste der Länderkarte: Staats- und Regierungschef, Provinzen nach Partei ihres
 // Regierungschefs, Städte, darunter Kennzahlen und Nachrichten des Landes.
-import type { CountryOverview, Events, Land, Launches, Leader, World } from "../api";
+import { useState } from "react";
+import { useApi, type CountryDetail, type CountryOverview, type Events, type Land, type Launches, type Leader, type World } from "../api";
 import { fmt } from "../format";
 import { cityCut, leaderColor, type LandLayers, type LandSel } from "../three/Country";
 import type { GlobeSel } from "../three/Globe";
-import { CountryPanel, Loading } from "./Panels";
+import { CountryPanel, Loading, statValue } from "./Panels";
+
+/** Sitzverteilung als Halbring, Parteien von links nach rechts nach Größe. */
+function Hemicycle({ parl }: { parl: NonNullable<Land["parliament"]> }) {
+  const W = 300;
+  const H = 160;
+  const cx = W / 2;
+  const cy = H - 6;
+  const ro = 140;
+  const ri = 78;
+  const total = parl.parties.reduce((s, p) => s + p.seats, 0) || 1;
+  let a0 = Math.PI;
+  const arcs = parl.parties.map((p) => {
+    const a1 = a0 - (p.seats / total) * Math.PI;
+    const pt = (r: number, a: number) => `${(cx + r * Math.cos(a)).toFixed(1)},${(cy - r * Math.sin(a)).toFixed(1)}`;
+    const large = a0 - a1 > Math.PI ? 1 : 0;
+    const d = `M${pt(ro, a0)}A${ro},${ro} 0 ${large} 1 ${pt(ro, a1)}L${pt(ri, a1)}A${ri},${ri} 0 ${large} 0 ${pt(ri, a0)}Z`;
+    a0 = a1;
+    return { p, d };
+  });
+  const color = (p: { name: string; color: string | null }) => leaderColor({ name: "", party: p.name, color: p.color });
+  return (
+    <>
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
+        {arcs.map(({ p, d }) => (
+          <path key={p.name} d={d} fill={color(p)} stroke="#030812" strokeWidth={1}>
+            <title>{`${p.name}: ${p.seats}`}</title>
+          </path>
+        ))}
+        <text x={cx} y={cy - 18} textAnchor="middle" fill="currentColor" fontSize={22}>
+          {parl.size ?? total}
+        </text>
+        <text x={cx} y={cy - 2} textAnchor="middle" fill="currentColor" fontSize={11} opacity={0.6}>
+          Sitze
+        </text>
+      </svg>
+      <table>
+        <tbody>
+          {parl.parties.slice(0, 9).map((p) => (
+            <tr key={p.name}>
+              <td>
+                <span style={{ color: color(p) }}>●</span> {p.name}
+              </td>
+              <td>{p.seats}</td>
+              <td className="dim small">{((p.seats / total) * 100).toFixed(0)} %</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
+  );
+}
+
+/** Kennzahlen zweier Länder nebeneinander. */
+function Compare({ iso3, overview }: { iso3: string; overview?: CountryOverview }) {
+  const [other, setOther] = useState("");
+  const a = useApi<CountryDetail>(`country/${iso3}`);
+  const b = useApi<CountryDetail>(other ? `country/${other}` : null);
+  const list = [...(overview?.list ?? [])].filter((c) => c.iso3 !== iso3).sort((x, y) => x.name.localeCompare(y.name, "de"));
+  return (
+    <>
+      <h3>Vergleichen</h3>
+      <select value={other} onChange={(e) => setOther(e.target.value)} style={{ width: "100%" }}>
+        <option value="">Land wählen …</option>
+        {list.map((c) => (
+          <option key={c.iso3} value={c.iso3}>
+            {c.name}
+          </option>
+        ))}
+      </select>
+      {other && (
+        <table>
+          <thead>
+            <tr>
+              <th />
+              <th>{a.data?.name ?? iso3}</th>
+              <th>{b.data?.name ?? other}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(a.data?.stats ?? []).map((s, i) => {
+              const t = b.data?.stats[i];
+              const better = s.value != null && t?.value != null ? (s.value > t.value ? 0 : s.value < t.value ? 1 : -1) : -1;
+              return (
+                <tr key={s.id}>
+                  <td>{s.name}</td>
+                  <td style={{ fontWeight: better === 0 ? 600 : undefined }}>{statValue(s)}</td>
+                  <td style={{ fontWeight: better === 1 ? 600 : undefined }}>{t ? statValue(t) : b.error ? "–" : "…"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+      {other && <p className="dim small">Fett: der höhere Wert, nicht unbedingt der bessere (Inflation, Arbeitslosigkeit). Weltbank, jüngster Jahreswert.</p>}
+    </>
+  );
+}
 
 function Who({ l }: { l: Leader | null | undefined }) {
   if (!l) return <span className="dim">unbekannt</span>;
@@ -129,6 +227,23 @@ export function LandPanel({
           </tbody>
         </table>
       )}
+      {data.parliament && data.parliament.parties.length > 0 && (
+        <>
+          <h3>{data.parliament.name}</h3>
+          {data.parliament.complete ? (
+            <Hemicycle parl={data.parliament} />
+          ) : (
+            <p className="dim small">
+              Wikidata führt für diese Kammer nur {data.parliament.sum} von {data.parliament.size ?? "?"} Sitzen; die Verteilung wäre irreführend und fehlt deshalb.
+            </p>
+          )}
+          {data.parliament.complete && (
+            <p className="dim small">
+              Wikidata, jüngster Stand je Partei; erfasst sind {data.parliament.sum} von {data.parliament.size} Sitzen.
+            </p>
+          )}
+        </>
+      )}
       <div className="chips">
         {(
           [
@@ -196,6 +311,7 @@ export function LandPanel({
         Quellen: Natural Earth 1:10 Mio. (Provinzen, Bahn, Straßen; grob, Stand der Datenbasis teils älter), GeoNames (Städte), Wikidata (Regierungschefs und Parteifarben, täglich).
         {data.errors.length > 0 && <span className="warn"> {data.errors.join(" · ")}</span>}
       </p>
+      <Compare iso3={iso3} overview={overview} />
       {world && <CountryPanel key={iso3} iso3={iso3} world={world} overview={overview} events={events} launches={launches} onSel={onGlobe} />}
     </>
   );

@@ -6,7 +6,7 @@ import { feature, mesh } from "topojson-client";
 import type { GeometryCollection, Topology } from "topojson-specification";
 import countries from "world-atlas/countries-110m.json";
 import land from "world-atlas/land-110m.json";
-import { ok, type Bank, type CountryOverview, type GeoEvent, type HotspotHeat, type LaunchSite, type MarketDetail, type Prediction, type Sentiment, type World } from "../api";
+import { ok, type Bank, type CountryOverview, type GeoEvent, type HotspotHeat, type LaunchSite, type MarketDetail, type Prediction, type Sentiment, type Transit, type World } from "../api";
 import { changeColor, fmt, mix, moodColor, pct } from "../format";
 import { Burst, Label, Pulse, latLon, upTo, useHover } from "./common";
 
@@ -14,6 +14,9 @@ export const R = 2;
 
 export type Layers = {
   sats: boolean;
+  flights: boolean;
+  aurora: boolean;
+  cables: boolean;
   markets: boolean;
   banks: boolean;
   hotspots: boolean;
@@ -508,12 +511,14 @@ function ChokeGate({
   preds,
   selected,
   onClick,
+  transit,
 }: {
   name: string;
   lat: number;
   lon: number;
   count: number | null;
   preds: number;
+  transit?: Transit;
   selected: boolean;
   onClick: () => void;
 }) {
@@ -521,7 +526,9 @@ function ChokeGate({
   const p = latLon(lat, lon, R);
   const q = upTo(p);
   const t = count == null ? 0 : Math.sqrt(Math.min(count, 150) / 150);
-  const color = count == null ? "#55606e" : mix("#46e0c8", "#ff4d6d", t);
+  // Mit Schiffsdaten färbt der Rückgang zum Vorjahr das Tor, sonst die Nachrichtenlage.
+  const drop = transit?.change != null ? Math.min(1, Math.max(0, -transit.change / 60)) : null;
+  const color = drop != null ? mix("#46e0c8", "#ff4d6d", drop) : count == null ? "#55606e" : mix("#46e0c8", "#ff4d6d", t);
   const r = 0.055;
   return (
     <group position={p} quaternion={q}>
@@ -545,6 +552,7 @@ function ChokeGate({
       {(hover || selected) && (
         <Label position={[0, r * 2 + 0.12, 0]}>
           <b>{name}</b>
+          {transit && <><br />{Math.round(transit.avg7)} Schiffe am Tag{transit.change != null && ` (${transit.change > 0 ? "+" : ""}${Math.round(transit.change)} % zum Vorjahr)`}</>}
           <br />
           <small>
             Engpass · {count == null ? "Nachrichten laden …" : `${count}${count >= 250 ? "+" : ""} Meldungen in 24 h`}
@@ -763,7 +771,9 @@ export function Globe({
   launches,
   mood,
   explode = false,
+  traffic,
 }: {
+  traffic?: Transit[];
   explode?: boolean;
   world: World | undefined;
   events: GeoEvent[] | undefined;
@@ -824,7 +834,7 @@ export function Globe({
           selected: sel?.type === "hotspot" && sel.id === h.id,
           onClick: () => onSelect({ type: "hotspot", id: h.id }),
         };
-        if (h.kind === "engpass") return layers.chokepoints ? <ChokeGate key={h.id} {...common} /> : null;
+        if (h.kind === "engpass") return layers.chokepoints ? <ChokeGate key={h.id} {...common} transit={traffic?.find((t) => t.id === h.id)} /> : null;
         return layers.hotspots ? <HotspotOrb key={h.id} {...common} /> : null;
       })}
       {events

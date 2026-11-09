@@ -4,6 +4,7 @@ import { EXT, tilesFor } from "../three/StockChart";
 import { ALERT_DE, CONFLICT_RGB, EVENT_KIND, POSITIVE_RGB, inCountry, type GlobeSel } from "../three/Globe";
 import { Spark } from "./Spark";
 import { SwarmTable } from "./SpacePanels";
+import { LapseControls, SpaceWeatherBlock, TrafficTab, TransitBlock } from "./LivePanels";
 import type { Satellites } from "../api";
 
 const Chg = ({ v, d = 2 }: { v: number | null | undefined; d?: number }) => <span style={{ color: changeColor(v) }}>{pct(v, d, false)}</span>;
@@ -229,6 +230,7 @@ function WorldPanelInner({
     ["notenbanken", "Notenbanken"],
     ["ereignisse", "Ereignisse"],
     ["raumfahrt", "Raumfahrt"],
+    ["verkehr", "Verkehr"],
   ];
   const tabs = (
     <div className="tabs">
@@ -242,6 +244,7 @@ function WorldPanelInner({
   if (tab === "maerkte") return <>{tabs}<MarketsTab world={world} mood={mood} onSel={onSel} /></>;
   if (tab === "notenbanken") return <>{tabs}<BanksTab world={world} onSel={onSel} /></>;
   if (tab === "ereignisse") return <>{tabs}{events ? <EventsTab data={events} onSel={(id) => onSel({ type: "event", id })} /> : <Loading />}</>;
+  if (tab === "verkehr") return <>{tabs}<TrafficTab onSel={onSel} /></>;
   if (tab === "raumfahrt") return <>{tabs}{launches ? <SpaceTab data={launches} sats={sats} onSel={(id) => onSel({ type: "launch", id })} onGlobe={onSel} /> : <Loading />}</>;
 
   const heatMap = new Map(heat?.map((h) => [h.id, h]) ?? []);
@@ -525,6 +528,7 @@ function EventsTab({ data, onSel }: { data: Events; onSel: (id: string) => void 
           {severe.length ? <>, davon mit Warnstufe Orange oder Rot: {list(severe.map((e) => e.name))}.</> : <>, keine mit Warnstufe Orange oder Rot.</>}
         </p>
       </div>
+      <LapseControls />
       <EventList data={data} onSel={onSel} />
       <TopicNewsBlock topic="ereignisse" />
     </>
@@ -543,6 +547,7 @@ function SpaceTab({ data, sats, onSel, onGlobe }: { data: Launches; sats?: Satel
   const topProv = [...providers.entries()].sort((a, b) => b[1] - a[1])[0];
   return (
     <>
+      <SpaceWeatherBlock />
       <h2>Im All</h2>
       <div className="actions">
         <button onClick={() => onGlobe({ type: "body", id: "system" })}>Ins Sonnensystem rauszoomen</button>
@@ -685,7 +690,7 @@ const REGION_DE: Record<string, string> = {
 };
 const INCOME_DE: Record<string, string> = { "High income": "hohes Einkommen", "Upper middle income": "oberes mittleres Einkommen", "Lower middle income": "unteres mittleres Einkommen", "Low income": "niedriges Einkommen" };
 
-function statValue(s: CountryDetail["stats"][number]) {
+export function statValue(s: CountryDetail["stats"][number]) {
   if (s.value == null) return "–";
   if (s.id === "SP.POP.TOTL") return s.value >= 1e6 ? `${fmt(s.value / 1e6, 1)} Mio.` : fmt(s.value, 0);
   if (s.unit === "USD") return s.value >= 1e9 ? `${big(s.value)} $` : `${fmt(s.value, 0)} $`;
@@ -923,6 +928,7 @@ function HotspotPanel({ h, predictions }: { h: Hotspot; predictions: Prediction[
       <h2>{h.name}</h2>
       {h.kind === "engpass" && <p className="dim">Engpass des Seehandels</p>}
       {h.note && <p>{h.note}</p>}
+      {h.kind === "engpass" && <TransitBlock id={h.id} />}
       {data && data.assets.length > 0 && (
         <table>
           <tbody>

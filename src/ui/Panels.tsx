@@ -1171,15 +1171,49 @@ export function LagePanel({
   setLayers,
   view,
   setView,
+  src,
+  setSrc,
 }: {
   layers: string[];
   setLayers: (l: string[]) => void;
   view: string;
   setView: (v: string) => void;
+  src: "wm" | "cyber";
+  setSrc: (s: "wm" | "cyber") => void;
 }) {
+  const pick = (
+    <div className="tabs">
+      <button className={src === "wm" ? "on" : ""} onClick={() => setSrc("wm")}>
+        Konflikte und Katastrophen
+      </button>
+      <button className={src === "cyber" ? "on" : ""} onClick={() => setSrc("cyber")}>
+        Cyberangriffe
+      </button>
+    </div>
+  );
+  if (src === "cyber")
+    return (
+      <>
+        <h2>Lagekarte</h2>
+        {pick}
+        <p>
+          Die Live Threat Map von Radware zeigt Angriffe fast in Echtzeit: Herkunft und Ziel als Bogen, dazu die Art (Webangriffe, Scans, DDoS, Einbruchsversuche) und die am
+          stärksten betroffenen Länder.
+        </p>
+        <p className="dim small">
+          Die Daten stammen aus Radwares eigenem Netz von Honeypots und den Ereignissen seiner Cloud-Kunden, nicht aus dem ganzen Internet. Ein Bogen zeigt, von wo ein Angriff
+          kommt, nicht wer dahinter steht; Angreifer laufen oft über fremde Rechner. Eingebettet von{" "}
+          <a className="plain" href="https://livethreatmap.radware.com" target="_blank" rel="noreferrer">
+            livethreatmap.radware.com
+          </a>
+          , bedient wird direkt in der Karte.
+        </p>
+      </>
+    );
   return (
     <>
       <h2>Lagekarte</h2>
+      {pick}
       <p className="dim small">
         Live-Karte von World Monitor, eingebettet über den freien Zugang. Aktualisiert sich stündlich. Klick auf ein Ereignis zeigt Details.
       </p>

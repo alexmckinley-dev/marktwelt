@@ -120,6 +120,7 @@ export default function App() {
   const satCtl = useMemo(() => ({ show: satShow, setShow: (id: string, v: boolean) => setSatShow((x) => ({ ...x, [id]: v })), focus: satFocus, setFocus: setSatFocus }), [satShow, satFocus]);
   const [lageLayers, setLageLayers] = useState<string[]>(["conflicts", "earthquakes", "weather"]);
   const [lageView, setLageView] = useState("welt");
+  const [lageSrc, setLageSrc] = useState<"wm" | "cyber">("wm");
   const [worldTab, setWorldTab] = useState("lage");
   const [secExploded, setSecExploded] = useState(false);
   const [secSel, setSecSel] = useState<string | null>(null);
@@ -416,12 +417,14 @@ export default function App() {
           </EffectComposer>
         </Canvas>
 
-        {view.k === "lage" && <LageMap layers={lageLayers} view={lageView} />}
+        {view.k === "lage" && <LageMap layers={lageLayers} view={lageView} src={lageSrc} />}
 
         <LiveCtx.Provider value={live}>
         <SatControl.Provider value={satCtl}>
         <aside>
-          {view.k === "lage" && <LagePanel layers={lageLayers} setLayers={setLageLayers} view={lageView} setView={setLageView} />}
+          {view.k === "lage" && (
+            <LagePanel layers={lageLayers} setLayers={setLageLayers} view={lageView} setView={setLageView} src={lageSrc} setSrc={setLageSrc} />
+          )}
           {view.k === "welt" && globeSel?.type === "sat" && (
             <>
               <button className="closebtn" onClick={() => selectGlobe(null)}>
@@ -515,14 +518,16 @@ export default function App() {
 
       <footer>
         <MacroStrip data={macro.data} />
-        <div className="src dim">Daten: Nasdaq (Kurse, verzögert), FRED, EZB, BIS, Cboe, GDELT, Polymarket, Hyperliquid, CME über Yahoo, USGS, GDACS, Weltbank, Wikipedia, Wikidata, Energy-Charts, PEGELONLINE, Natural Earth, GeoNames, CelesTrak, IMF PortWatch, OpenSky, NOAA SWPC, TeleGeography, Launch Library 2, Google News, Lagekarte von World Monitor · keine Anlageberatung</div>
+        <div className="src dim">Daten: Nasdaq (Kurse, verzögert), FRED, EZB, BIS, Cboe, GDELT, Polymarket, Hyperliquid, CME über Yahoo, USGS, GDACS, Weltbank, Wikipedia, Wikidata, Energy-Charts, PEGELONLINE, Natural Earth, GeoNames, CelesTrak, IMF PortWatch, OpenSky, NOAA SWPC, TeleGeography, Launch Library 2, Google News, Lagekarten von World Monitor und Radware · keine Anlageberatung</div>
       </footer>
     </div>
   );
 }
 
-/** Freie Einbett-Karte von World Monitor (Konflikte, Erdbeben, Unwetter; stündlich). */
-function LageMap({ layers, view }: { layers: string[]; view: string }) {
+/** Freie Einbett-Karte von World Monitor (Konflikte, Erdbeben, Unwetter; stündlich) oder die
+ *  Live Threat Map von Radware (Cyberangriffe). Radware hat keine offene Schnittstelle, deshalb nur als Einbettung. */
+function LageMap({ layers, view, src: which }: { layers: string[]; view: string; src: "wm" | "cyber" }) {
+  if (which === "cyber") return <iframe className="lagemap" src="https://livethreatmap.radware.com/" title="Live Threat Map von Radware" referrerPolicy="no-referrer" />;
   const v = LAGE_VIEWS.find((x) => x.id === view) ?? LAGE_VIEWS[0];
   const src = `https://www.worldmonitor.app/embed?layers=${(layers.length ? layers : ["conflicts"]).join(",")}&center=${v.center}&zoom=${v.zoom}&theme=dark&variant=full`;
   return <iframe className="lagemap" key={src} src={src} title="Lagekarte von World Monitor" referrerPolicy="no-referrer" />;

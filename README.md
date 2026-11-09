@@ -55,6 +55,7 @@ Alle ohne API-Schlüssel, mit Cache und Drossel im Server.
 | Wikidata SPARQL | Staats- und Regierungschefs, Regierungschefs der Provinzen, Parteien und Parteifarben | 1 Tag |
 | Autobahn GmbH (`verkehr.autobahn.de`) | Laufende Baustellen auf allen Autobahnen | 30 min |
 | World Monitor (`/embed`) | Lagekarte als iframe, freie Stufe ohne Schlüssel | stündlich |
+| Radware Live Threat Map | Cyberangriffe als iframe in der Lagekarte; die interne API der Seite wird nicht abgerufen | live |
 
 Ländermärkte erscheinen über US-gelistete Länder-ETFs (iShares MSCI …), also in USD. Kurse sind verzögert.
 

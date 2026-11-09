@@ -21,7 +21,14 @@ export function landProj(f: Land["frame"]): Proj {
 /** Parteifarbe aus Wikidata, sonst eine feste Farbe aus dem Namen. */
 export function leaderColor(l: Leader | null | undefined) {
   if (!l?.party) return "#3a4656";
-  if (l.color && /^#[0-9a-f]{6}$/i.test(l.color)) return l.color;
+  if (l.color && /^#[0-9a-f]{6}$/i.test(l.color)) {
+    // sehr dunkle Parteifarben (Marineblau, Schwarz) auf dem dunklen Grund anheben
+    const c = new THREE.Color(l.color);
+    const hsl = { h: 0, s: 0, l: 0 };
+    c.getHSL(hsl);
+    if (hsl.l < 0.38) c.setHSL(hsl.h, Math.min(hsl.s, 0.8), 0.45);
+    return `#${c.getHexString()}`;
+  }
   let h = 0;
   for (const ch of l.party) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   return `#${new THREE.Color().setHSL((h % 360) / 360, 0.55, 0.55).getHexString()}`;

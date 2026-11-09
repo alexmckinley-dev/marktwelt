@@ -27,7 +27,7 @@ export type Layers = {
   mood: boolean;
 };
 export type GlobeSel = {
-  type: "market" | "bank" | "hotspot" | "event" | "country" | "launch" | "mood" | "sat" | "body";
+  type: "market" | "bank" | "hotspot" | "event" | "country" | "launch" | "mood" | "sat" | "body" | "view";
   id: string;
   lat?: number;
   lon?: number;

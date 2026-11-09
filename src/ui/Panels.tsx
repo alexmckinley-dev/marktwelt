@@ -547,7 +547,7 @@ function SpaceTab({ data, sats, onSel, onGlobe }: { data: Launches; sats?: Satel
   const topProv = [...providers.entries()].sort((a, b) => b[1] - a[1])[0];
   return (
     <>
-      <SpaceWeatherBlock />
+      <SpaceWeatherBlock onGlobe={onGlobe} />
       <h2>Im All</h2>
       <div className="actions">
         <button onClick={() => onGlobe({ type: "body", id: "system" })}>Ins Sonnensystem rauszoomen</button>

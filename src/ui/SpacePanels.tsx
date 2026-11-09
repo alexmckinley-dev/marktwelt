@@ -261,7 +261,7 @@ function PegelBlock({ p, onSel }: { p: Pegel; onSel: (s: DeSel) => void }) {
           </tbody>
         </table>
       )}
-      <p className="dim small">PEGELONLINE, alle 15 Minuten. Gelb: niedrig, rot: hoch. Gut die Hälfte der Pegel hat keine Einordnung und erscheint grau.</p>
+      <p className="dim small">PEGELONLINE, alle 15 Minuten. Violett: niedrig, rot: hoch. Gut die Hälfte der Pegel hat keine Einordnung und erscheint grau.</p>
     </>
   );
 }

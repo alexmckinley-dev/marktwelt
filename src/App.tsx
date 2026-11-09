@@ -220,6 +220,8 @@ export default function App() {
           const back = p.clone().normalize().multiplyScalar(-(size * 9 + 6));
           return { pos: p.clone().add(back).add(V(0, size * 2 + 1, 0)), target: p, key: `b-${globeSel.id}` };
         }
+        // Blick von oben auf einen Pol, etwa für das Polarlichtoval
+        if (globeSel.type === "view") return { pos: V(0, globeSel.id === "sued" ? -6.4 : 6.4, 0.9), target: V(0, 0, 0), key: `v-${globeSel.id}` };
         if (globeSel.type === "sat") {
           if (!satState) return { pos: V(0, 1.4, 6.6), target: V(0, 0, 0), key: "w" };
           const p = latLon(satState.lat, satState.lon, rSat(satState.alt));

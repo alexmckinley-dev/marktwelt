@@ -15,6 +15,23 @@ function setXYZ(a: Float32Array, i: number, lat: number, lon: number, r: number)
   a[i * 3 + 2] = r * Math.sin(phi) * Math.sin(th);
 }
 
+/** Runder, weich auslaufender Punkt statt der eckigen Standardpunkte. */
+let dot: THREE.Texture | null = null;
+function dotTexture() {
+  if (dot) return dot;
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const g = c.getContext("2d")!;
+  const r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  r.addColorStop(0, "rgba(255,255,255,1)");
+  r.addColorStop(0.35, "rgba(255,255,255,0.85)");
+  r.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = r;
+  g.fillRect(0, 0, 64, 64);
+  dot = new THREE.CanvasTexture(c);
+  return dot;
+}
+
 // ---------- Flugzeuge ----------
 
 /** Flugzeuge als Lichtpunkte knapp über der Erde. Zwischen zwei Abrufen fliegen sie nach Kurs und Tempo weiter. */
@@ -59,8 +76,8 @@ export function AuroraLayer({ data }: { data: SpaceWeather | undefined }) {
     const c = new THREE.Color();
     pts.forEach(([lon, lat, p], i) => {
       setXYZ(pos, i, lat, lon, R * 1.025);
-      const k = Math.min(1, p / 60);
-      c.set(k > 0.6 ? "#b0ff8a" : "#2ee68c").multiplyScalar(0.25 + k * 0.9);
+      const k = Math.min(1, p / 40);
+      c.set(k > 0.6 ? "#b0ff8a" : "#2ee68c").multiplyScalar(0.55 + k * 1.1);
       col.set([c.r, c.g, c.b], i * 3);
     });
     const g = new THREE.BufferGeometry();
@@ -71,7 +88,7 @@ export function AuroraLayer({ data }: { data: SpaceWeather | undefined }) {
   if (!data) return null;
   return (
     <points geometry={geo}>
-      <pointsMaterial size={3.2} sizeAttenuation={false} vertexColors transparent opacity={0.55} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
+      <pointsMaterial map={dotTexture()} size={7} sizeAttenuation={false} vertexColors transparent opacity={0.8} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
     </points>
   );
 }
@@ -114,7 +131,7 @@ export function CableLayer({ data }: { data: Cables | undefined }) {
   if (!data) return null;
   return (
     <lineSegments geometry={geo}>
-      <lineBasicMaterial vertexColors transparent opacity={0.3} depthWrite={false} toneMapped={false} />
+      <lineBasicMaterial vertexColors transparent opacity={0.2} depthWrite={false} toneMapped={false} />
     </lineSegments>
   );
 }
@@ -160,10 +177,10 @@ export function TimelapseLayer({ events, t }: { events: GeoEvent[]; t: number })
   return (
     <group>
       <points geometry={geos.old}>
-        <pointsMaterial size={3} sizeAttenuation={false} vertexColors transparent opacity={0.8} depthWrite={false} toneMapped={false} />
+        <pointsMaterial map={dotTexture()} size={6} sizeAttenuation={false} vertexColors transparent opacity={0.9} depthWrite={false} toneMapped={false} />
       </points>
       <points geometry={geos.fresh}>
-        <pointsMaterial size={9} sizeAttenuation={false} vertexColors transparent opacity={0.95} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
+        <pointsMaterial map={dotTexture()} size={18} sizeAttenuation={false} vertexColors transparent opacity={1} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
       </points>
     </group>
   );

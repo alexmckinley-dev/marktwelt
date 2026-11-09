@@ -273,10 +273,11 @@ export function Cities({
   );
 }
 
-export const PEGEL_COLOR: Record<string, string> = { low: "#ffd166", normal: "#7fd6ff", high: "#ff3b4f" };
+// Violett statt Gelb für Niedrigwasser, sonst gehen die Pegel zwischen Bahn (orange) und Baustellen unter.
+export const PEGEL_COLOR: Record<string, string> = { low: "#b98cff", normal: "#7fd6ff", high: "#ff3b4f" };
 export const PEGEL_DE: Record<string, string> = { low: "niedrig", normal: "normal", high: "hoch" };
 
-/** Pegel als kleine Kugeln: gelb unter mittlerem Niedrigwasser, rot über mittlerem Hochwasser. */
+/** Pegel als kleine Kugeln: violett unter mittlerem Niedrigwasser, rot über mittlerem Hochwasser. */
 function Gauges({ items, sel, onSelect }: { items: Pegel["items"]; sel: DeSel; onSelect: (s: DeSel) => void }) {
   const ref = useRef<THREE.InstancedMesh>(null);
   const [hover, bind] = useHover();
@@ -288,8 +289,8 @@ function Gauges({ items, sel, onSelect }: { items: Pegel["items"]; sel: DeSel; o
     const c = new THREE.Color();
     items.forEach((g, i) => {
       const [x, z] = proj(g.lon, g.lat);
-      o.position.set(x, TILE_H + 0.03, z);
-      o.scale.setScalar(sel?.type === "pegel" && sel.id === g.id ? 2.4 : g.state === "normal" || !PEGEL_COLOR[g.state] ? 0.8 : 1.3);
+      o.position.set(x, TILE_H + 0.035, z);
+      o.scale.setScalar(sel?.type === "pegel" && sel.id === g.id ? 2.4 : g.state === "normal" || !PEGEL_COLOR[g.state] ? 0.8 : 1.6);
       o.updateMatrix();
       m.setMatrixAt(i, o.matrix);
       m.setColorAt(i, c.set(PEGEL_COLOR[g.state] ?? "#5a6878"));

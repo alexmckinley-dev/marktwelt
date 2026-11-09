@@ -178,7 +178,7 @@ export function TrafficTab({ onSel }: { onSel: (s: GlobeSel) => void }) {
 
 const G_DE = ["keiner", "schwach", "mäßig", "stark", "schwer", "extrem"];
 
-export function SpaceWeatherBlock() {
+export function SpaceWeatherBlock({ onGlobe }: { onGlobe?: (s: GlobeSel) => void }) {
   const w = useLive()?.weather;
   if (!w) return null;
   const north = w.aurora.filter((a) => a[1] > 0 && a[2] >= 10);
@@ -192,6 +192,12 @@ export function SpaceWeatherBlock() {
         {w.scales && (w.scales.S > 0 || w.scales.R > 0) ? `, Strahlung S${w.scales.S}, Funkausfall R${w.scales.R}` : ""}.{" "}
         {southmost != null && <>Polarlicht reicht im Norden bis etwa {fmt(southmost, 0)}° Breite{southmost <= 52 ? ", also bis nach Deutschland" : ""}.</>}
       </p>
+      {onGlobe && (
+        <div className="actions">
+          <button onClick={() => onGlobe({ type: "view", id: "nord" })}>Polarlicht im Norden</button>
+          <button onClick={() => onGlobe({ type: "view", id: "sued" })}>im Süden</button>
+        </div>
+      )}
       <Spark points={w.forecast.map((f) => f.kp)} width={300} height={40} color="#2ee68c" />
       <p className="dim small">NOAA SWPC: Kp alle drei Stunden, Vorhersage drei Tage, Polarlichtoval (OVATION) alle 30 Minuten. Ab Kp 5 beginnt ein Sturm, der Satelliten und Stromnetze stören kann.</p>
     </>

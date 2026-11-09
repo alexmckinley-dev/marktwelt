@@ -224,7 +224,7 @@ export default function App() {
           {view.k === "termine" && <CalendarScene items={cal.data} onOpen={openStock} />}
           {(view.k === "aktie" || view.k === "markt") && chart && (
             <group>
-              <CandleChart bars={chart.bars} sma50={chart.sma50} sma200={chart.sma200} />
+              <CandleChart bars={chart.extended ? [...chart.bars, ...chart.extended.bars] : chart.bars} sma50={chart.sma50} sma200={chart.sma200} />
               <MetricCube ind={chart.indicators} open={cubeOpen} setOpen={setCubeOpen} />
             </group>
           )}

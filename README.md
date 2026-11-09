@@ -11,7 +11,7 @@ Globale Kapitalmärkte in 3D, von der Weltlage bis zur Einzelaktie. Jedes Elemen
 | **Sektoren** | S&P 500 als Kugel aus elf Sektor-Schnitzen | Kern: Kugel zerfällt. Schnitz: größte Werte des Sektors als Kugeln (Größe = Börsenwert). Kugel: Einzelaktie. |
 | **Termine** | Quartalszahlen der nächsten zwei Wochen als Spirale, ab 10 Mrd. USD Börsenwert | Kugel: Einzelaktie |
 | **Lagekarte** | Freie Einbett-Karte von World Monitor: Konflikte, Erdbeben, Unwetter, stündlich | Ausschnitt und Ebenen im Panel |
-| **Aktie** | 3D-Kerzenchart mit Volumen, 50- und 200-Tage-Linie, Kennzahlen-Würfel | Würfel: sechs Kacheln mit Trend, Performance, RSI, Volatilität, Abstand zum Hoch, Beta |
+| **Aktie** | 3D-Kerzenchart mit Volumen, 50- und 200-Tage-Linie, Kennzahlen-Würfel. Außerbörsliche Tage aus Perps oder Futures hängen blau hinterlegt hinten dran; das Panel zeigt den umgerechneten Kurs seit Schluss und eine Stundenkurve über drei Tage | Würfel: sechs Kacheln mit Trend, Performance, RSI, Volatilität, Abstand zum Hoch, Beta |
 
 Unten läuft eine Makro-Leiste mit 15 Reihen (Zinsen, Kurve, Rohstoffe, Devisen, Indizes).
 
@@ -28,6 +28,8 @@ Alle ohne API-Schlüssel, mit Cache und Drossel im Server.
 | Cboe | VIX und VIX3M für die Stimmung | 60 min |
 | Polymarket (Gamma API) | Prognosemärkte zur Geopolitik, über Schlagworte den Brennpunkten zugeordnet | 15 min |
 | GDELT | Nachrichten zu Brennpunkten und Engpässen; ein Abruf je 10 s, nach Sperre wachsender Rückzug bis 15 min | 60 min |
+| Hyperliquid (`api.hyperliquid.xyz/info`, Börse `xyz` von trade.xyz) | Aktien-, Index- und Rohstoff-Perps rund um die Uhr (rund 120 Werte, z. B. NVDA, SP500, XYZ100, EWJ, GOLD, CL), Stundenkerzen | 1 min Kurse, 5 min Kerzen |
+| Yahoo Chart (`query1.finance.yahoo.com/v8`) | CME-Futures ES, NQ, YM, RTY, GC, CL als zweiter Bezug, rund 10 min verzögert | 5 min |
 | World Monitor (`/embed`) | Lagekarte als iframe, freie Stufe ohne Schlüssel | stündlich |
 
 Ländermärkte erscheinen über US-gelistete Länder-ETFs (iShares MSCI …), also in USD. Kurse sind verzögert.

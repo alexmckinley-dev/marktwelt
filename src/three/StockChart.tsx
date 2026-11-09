@@ -2,13 +2,15 @@ import { Line } from "@react-three/drei";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import type { Bar, Indicators } from "../api";
-import { dateDe, fmt, pct } from "../format";
+import { dateDe, fmt, mix, pct } from "../format";
 import { Burst, Label, useHover } from "./common";
 
 const W = 7.5; // Breite der Zeitachse
 const H = 3; // Höhe der Kursachse
+export const EXT = "#5aa9ff"; // Farbe für Kurse außerhalb der US-Handelszeit
 
-/** 3D-Kerzenchart mit Volumen dahinter und gleitenden Durchschnitten davor. */
+/** 3D-Kerzenchart mit Volumen dahinter und gleitenden Durchschnitten davor.
+ *  Balken mit `x` stammen aus dem Handel rund um die Uhr und liegen auf einem blauen Band. */
 export function CandleChart({ bars, sma50, sma200 }: { bars: Bar[]; sma50?: (number | null)[]; sma200?: (number | null)[] }) {
   const body = useRef<THREE.InstancedMesh>(null);
   const wick = useRef<THREE.InstancedMesh>(null);
@@ -27,7 +29,7 @@ export function CandleChart({ bars, sma50, sma200 }: { bars: Bar[]; sma50?: (num
     const col = new THREE.Color();
     bars.forEach((b, i) => {
       const up = b.c >= (b.o || b.c);
-      col.set(up ? "#2ee6a6" : "#ff4d6d");
+      col.set(b.x ? mix(up ? "#2ee6a6" : "#ff4d6d", EXT, 0.45) : up ? "#2ee6a6" : "#ff4d6d");
       const top = y(Math.max(b.o || b.c, b.c));
       const bot = y(Math.min(b.o || b.c, b.c));
       o.position.set(x(i), (top + bot) / 2, 0);
@@ -64,6 +66,9 @@ export function CandleChart({ bars, sma50, sma200 }: { bars: Bar[]; sma50?: (num
   const l200 = useMemo(() => line(sma200), [sma200, bars]);
 
   const hb = hoverI != null ? bars[hoverI] : null;
+  const firstX = bars.findIndex((b) => b.x);
+  const band =
+    firstX < 0 ? null : { x0: x(firstX) - (W / Math.max(1, n)) * 0.5, x1: x(n - 1) + (W / Math.max(1, n)) * 0.5 };
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((t) => lo + (hi - lo) * t);
   const months = bars.map((b, i) => [b, i] as const).filter(([b, i]) => i > 0 && b.d.slice(5, 7) !== bars[i - 1].d.slice(5, 7));
 
@@ -91,6 +96,18 @@ export function CandleChart({ bars, sma50, sma200 }: { bars: Bar[]; sma50?: (num
       </instancedMesh>
       {l50.length > 1 && <Line points={l50} color="#f5c451" lineWidth={2} />}
       {l200.length > 1 && <Line points={l200} color="#9b7bff" lineWidth={2} />}
+      {band && (
+        <group>
+          <mesh position={[(band.x0 + band.x1) / 2, H / 2 + 0.1, -0.35]}>
+            <planeGeometry args={[Math.max(0.05, band.x1 - band.x0), H + 0.5]} />
+            <meshBasicMaterial color={EXT} transparent opacity={0.13} toneMapped={false} depthWrite={false} />
+          </mesh>
+          <Line points={[[band.x0, -0.05, -0.34], [band.x0, H + 0.35, -0.34]]} color={EXT} lineWidth={1.5} dashed dashSize={0.08} gapSize={0.06} />
+          <Label position={[(band.x0 + band.x1) / 2, H + 0.55, -0.35]} className="small ext">
+            außerbörslich
+          </Label>
+        </group>
+      )}
       {/* Boden und Raster */}
       <gridHelper args={[W + 1, 18, "#1d3a52", "#11263a"]} position={[0, -0.01, -0.2]} scale={[1, 1, 0.2]} />
       {ticks.map((t) => (
@@ -109,6 +126,7 @@ export function CandleChart({ bars, sma50, sma200 }: { bars: Bar[]; sma50?: (num
       {hb && hoverI != null && (
         <Label position={[x(hoverI), y(hb.h || hb.c) + 0.35, 0]}>
           <b>{dateDe(hb.d)}</b>
+          {hb.x && <span className="ext"> · außerbörslich, umgerechnet</span>}
           <br />
           Schluss {fmt(hb.c)} · Hoch {fmt(hb.h)} · Tief {fmt(hb.l)}
         </Label>

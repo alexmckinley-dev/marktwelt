@@ -1,6 +1,7 @@
 // API-Routen. Wird vom Vite-Dev-Server als Middleware und von server/index.ts genutzt.
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { indicators, pctRank, percentile, sma, thin } from "./analytics.ts";
+import { extended } from "./extended.ts";
 import { settle } from "./lib.ts";
 import { bisRates, cboeSeries, earnings, ecbSeries, fredSeries, gdeltStatus, history, news, predictions, quote, summary, type Point } from "./sources.ts";
 import { CENTRAL_BANKS, HOTSPOTS, MACRO_SERIES, MARKETS, SECTORS } from "./universe.ts";
@@ -270,6 +271,7 @@ const routes: [RegExp, string[], Handler][] = [
       const off = h.length - tail.length;
       return {
         quote: q,
+        extended: await extended(sym, h).catch(() => null),
         summary: s,
         indicators: { ...ind, series: undefined },
         bars: tail,
@@ -291,6 +293,7 @@ const routes: [RegExp, string[], Handler][] = [
       return {
         market: m,
         quote: q,
+        extended: await extended(m.etf, h).catch(() => null),
         indicators: { ...ind, series: undefined },
         bars: tail,
         sma50: ind.series.sma50.slice(off),

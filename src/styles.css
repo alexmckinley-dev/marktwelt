@@ -8,6 +8,7 @@
   --up: #2ee6a6;
   --down: #ff4d6d;
   --warn: #f5c451;
+  --ext: #5aa9ff;
   color-scheme: dark;
 }
 
@@ -87,6 +88,13 @@ a.plain { color: var(--text); text-decoration: none; }
 a.plain:hover { color: var(--accent); }
 
 .lagemap { position: absolute; top: 12px; left: 12px; width: calc(100% - 396px); height: calc(100% - 24px); border: 1px solid var(--line); border-radius: 14px; background: var(--bg); z-index: 2; }
+
+.ext { color: var(--ext); }
+.ext-box { margin: 10px 0; padding: 2px 10px 6px; border: 1px solid var(--line); border-radius: 10px; }
+.ext-box.on { border-color: rgba(90, 169, 255, 0.55); background: rgba(90, 169, 255, 0.08); box-shadow: 0 0 16px rgba(90, 169, 255, 0.15) inset; }
+.ext-box h3 { margin-top: 8px; }
+.ext-box .hero { font-size: 22px; }
+.label3d.ext { color: var(--ext); border-color: rgba(90, 169, 255, 0.5); }
 
 .news { list-style: none; padding: 0; margin: 0; }
 .news li { padding: 7px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.05); display: flex; flex-direction: column; gap: 2px; }

@@ -1,6 +1,6 @@
-import { ok, useApi, type Earning, type Hotspot, type HotspotDetail, type HotspotHeat, type Prediction, type Macro, type MarketDetail, type Sector, type SectorDetail, type Sentiment, type Stock, type World } from "../api";
+import { ok, useApi, type Extended, type Earning, type Hotspot, type HotspotDetail, type HotspotHeat, type Prediction, type Macro, type MarketDetail, type Sector, type SectorDetail, type Sentiment, type Stock, type World } from "../api";
 import { big, changeColor, dateDe, fmt, moodColor, parseBig, pct, signed, weekdayDe } from "../format";
-import { tilesFor } from "../three/StockChart";
+import { EXT, tilesFor } from "../three/StockChart";
 import type { GlobeSel } from "../three/Globe";
 import { Spark } from "./Spark";
 
@@ -8,6 +8,85 @@ const Chg = ({ v, d = 2 }: { v: number | null | undefined; d?: number }) => <spa
 
 export function Loading({ error }: { error?: string }) {
   return <p className="dim">{error ? `Fehler: ${error}` : "lädt …"}</p>;
+}
+
+// ---------- Rund um die Uhr ----------
+
+const SESSION_DE = { regular: "Börse offen", pre: "Vorbörse", post: "Nachbörse", closed: "Börse geschlossen" } as const;
+
+/** Stundenkurve der letzten drei Tage; Zeiten außerhalb der US-Handelszeit liegen blau hinterlegt. */
+function SessionSpark({ hours, refClose, width = 320, height = 74 }: { hours: Extended["hours"]; refClose: number; width?: number; height?: number }) {
+  if (hours.length < 2) return null;
+  const ys = hours.map((h) => h.c);
+  const lo = Math.min(...ys, refClose);
+  const hi = Math.max(...ys, refClose);
+  const X = (i: number) => (i / (hours.length - 1)) * width;
+  const Y = (v: number) => height - 3 - ((v - lo) / (hi - lo || 1)) * (height - 6);
+  const runs: [number, number][] = [];
+  hours.forEach((h, i) => {
+    if (!h.off) return;
+    const r = runs.at(-1);
+    if (r && r[1] === i - 1) r[1] = i;
+    else runs.push([i, i]);
+  });
+  const step = width / (hours.length - 1);
+  const d = ys.map((v, i) => `${i ? "L" : "M"}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join("");
+  return (
+    <svg width={width} height={height} className="spark" role="img" aria-label="Kursverlauf der letzten drei Tage, stündlich">
+      {runs.map(([a, b]) => (
+        <rect key={a} x={Math.max(0, X(a) - step / 2)} y={0} width={Math.min(width, X(b) - X(a) + step)} height={height} fill={EXT} opacity={0.14} />
+      ))}
+      <line x1={0} x2={width} y1={Y(refClose)} y2={Y(refClose)} stroke="var(--dim)" strokeDasharray="3 3" strokeWidth={1} />
+      <path d={d} fill="none" stroke="var(--text)" strokeWidth={1.5} />
+    </svg>
+  );
+}
+
+export function ExtendedBlock({ ext }: { ext: Extended | null | undefined }) {
+  if (!ext) return null;
+  const off = ext.session !== "regular";
+  const main = ext.sources[0];
+  return (
+    <div className={off ? "ext-box on" : "ext-box"}>
+      <h3>
+        Rund um die Uhr · <span className={off ? "ext" : "dim"}>{SESSION_DE[ext.session]}</span>
+      </h3>
+      {off && (
+        <div className="hero ext">
+          {fmt(main.implied)} <Chg v={main.changePct} />
+          <small className="dim"> seit Schluss</small>
+        </div>
+      )}
+      <p className="dim small">
+        Bezug: Schluss {fmt(ext.ref.close)} am {dateDe(ext.ref.d)}. Umgerechnet über die Veränderung des Instruments seit diesem Schluss.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Instrument</th><th>Kurs</th><th>seit Schluss</th></tr>
+        </thead>
+        <tbody>
+          {ext.sources.map((s) => (
+            <tr key={s.instrument}>
+              <td>
+                <a className="plain" href={s.url} target="_blank" rel="noreferrer">{s.label}</a>
+                <br />
+                <small className="dim">
+                  {s.kind === "perp" ? "24/7" : "fast 24/5, ca. 10 min verzögert"}
+                  {s.volume24h ? ` · Umsatz 24 h ${big(s.volume24h)} $` : ""}
+                </small>
+              </td>
+              <td>{fmt(s.price, s.price > 1000 ? 0 : 2)}</td>
+              <td><Chg v={s.changePct} /></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <SessionSpark hours={ext.hours} refClose={ext.ref.close} />
+      <p className="dim small">
+        Stündlich, drei Tage, umgerechnet auf den Kurs des Wertpapiers. <span className="ext">Blau</span>: außerhalb der US-Handelszeit (9:30–16 Uhr New York, ohne Feiertage). Gestrichelt: letzter Schluss. Perps auf Hyperliquid bilden ihren Preis außerbörslich nur aus Angebot und Nachfrage; bei wenig Umsatz kann er stärker abweichen.
+      </p>
+    </div>
+  );
 }
 
 // ---------- Welt ----------
@@ -46,6 +125,7 @@ export function WorldPanel({
         <p className="dim small">Stand {q?.time ?? "–"}</p>
         {d ? (
           <>
+            <ExtendedBlock ext={d.extended} />
             <Spark points={d.bars.map((b) => b.c)} width={300} height={70} />
             <table>
               <tbody>
@@ -401,6 +481,7 @@ export function StockPanel({ data, error, title }: { data: Stock | MarketDetail 
       <p className="dim small">
         {q.time ?? ""} · {q.marketStatus ?? ""}
       </p>
+      <ExtendedBlock ext={data.extended} />
       <div className="tiles">
         {tilesFor(data.indicators).map((t) => (
           <div key={t.id} className={`tile ${t.tone}`}>
@@ -422,7 +503,9 @@ export function StockPanel({ data, error, title }: { data: Stock | MarketDetail 
           </tbody>
         </table>
       )}
-      <p className="dim small">Gelb: 50-Tage-Linie · Violett: 200-Tage-Linie · hinten: Volumen. Ziehen dreht, Scrollen zoomt.</p>
+      <p className="dim small">
+        Gelb: 50-Tage-Linie · Violett: 200-Tage-Linie · hinten: Volumen{data.extended?.bars.length ? " · blau hinterlegt: außerbörslich" : ""}. Ziehen dreht, Scrollen zoomt.
+      </p>
     </>
   );
 }

@@ -15,6 +15,17 @@ export async function getJson<T = unknown>(url: string, timeoutMs?: number): Pro
   return JSON.parse(await getText(url, timeoutMs)) as T;
 }
 
+export async function postJson<T = unknown>(url: string, body: unknown, timeoutMs = 12000): Promise<T> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "User-Agent": UA, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!res.ok) throw new Error(`${res.status} ${url}`);
+  return (await res.json()) as T;
+}
+
 type Entry = { value: unknown; at: number; pending?: Promise<unknown> };
 const store = new Map<string, Entry>();
 

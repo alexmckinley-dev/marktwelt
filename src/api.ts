@@ -93,7 +93,25 @@ export type SectorDetail = {
   members: { symbol: string; quote: Maybe<Quote>; marketCap: string | null }[];
 };
 
-export type Bar = { d: string; o: number; h: number; l: number; c: number; v: number };
+export type Bar = { d: string; o: number; h: number; l: number; c: number; v: number; x?: "off" | "mixed" };
+export type ExtSource = {
+  kind: "perp" | "future";
+  label: string;
+  instrument: string;
+  price: number;
+  changePct: number;
+  implied: number;
+  time: string;
+  volume24h: number | null;
+  url: string;
+};
+export type Extended = {
+  session: "regular" | "pre" | "post" | "closed";
+  ref: { d: string; close: number };
+  sources: ExtSource[];
+  hours: { t: number; c: number; off: boolean }[];
+  bars: Bar[];
+};
 export type Indicators = {
   last: number | null;
   perf: { m1: number | null; m3: number | null; ytd: number | null; y1: number | null };
@@ -112,6 +130,7 @@ export type Indicators = {
 };
 export type Stock = {
   quote: Quote;
+  extended: Extended | null;
   summary: Record<string, string>;
   indicators: Indicators;
   bars: Bar[];
@@ -121,6 +140,7 @@ export type Stock = {
 export type MarketDetail = {
   market: Omit<Market, "quote">;
   quote: Quote;
+  extended: Extended | null;
   indicators: Indicators;
   bars: Bar[];
   sma50: (number | null)[];

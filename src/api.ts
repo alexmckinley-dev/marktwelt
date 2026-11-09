@@ -236,3 +236,37 @@ export type Launch = {
 export type LaunchSite = { id: string; name: string; country: string | null; lat: number; lon: number; launches: Launch[] };
 export type Launches = { sites: LaunchSite[]; total: number; asOf: string };
 export type TopicNews = { name: string; query: string; items: NewsItem[] };
+
+// ---------- Weltraum und Deutschland ----------
+
+export type Satellites = {
+  named: { id: string; catnr: number; name: string; kind: string; note: string; l1: string; l2: string }[];
+  swarms: { id: string; name: string; color: string; tle: [string, string][] }[];
+  asOf: string;
+};
+export type Ring = [number, number][];
+export type ElectionArea = { type: string; nr: number; name: string; turnout: number | null; parties: { name: string; pct2: number | null; pct1: number | null }[] };
+export type GermanyBase = {
+  laender: { ags: string; name: string; polys: Ring[][] }[];
+  wahlkreise: { nr: number; name: string; land: string; polys: Ring[][] }[];
+  results: { bund: ElectionArea | null; laender: ElectionArea[]; wahlkreise: ElectionArea[] };
+  governments: { ags: string; land: string; head: string | null; party: string | null }[];
+  cities: { name: string; lat: number; lon: number; pop: number }[];
+  errors: string[];
+};
+export type GermanyNet = { bahn: number[][]; autobahn: number[][]; bundesstrasse: number[][] };
+export type Baustelle = {
+  id: string;
+  road: string;
+  title: string;
+  dir: string;
+  lat: number;
+  lon: number;
+  blocked: boolean;
+  short: boolean;
+  start: string | null;
+  end: string | null;
+  length: string | null;
+  text: string;
+};
+export type Baustellen = { items: Baustelle[]; roads: number; asOf: string };

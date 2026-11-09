@@ -22,7 +22,12 @@ export type Layers = {
   launches: boolean;
   mood: boolean;
 };
-export type GlobeSel = { type: "market" | "bank" | "hotspot" | "event" | "country" | "launch" | "mood"; id: string; lat?: number; lon?: number } | null;
+export type GlobeSel = {
+  type: "market" | "bank" | "hotspot" | "event" | "country" | "launch" | "mood" | "sat" | "body";
+  id: string;
+  lat?: number;
+  lon?: number;
+} | null;
 
 export const EVENT_KIND: Record<GeoEvent["kind"], { name: string; color: string }> = {
   beben: { name: "Erdbeben", color: "#f5a742" },
@@ -65,25 +70,36 @@ function useLandDots() {
   }, []);
 }
 
-function LandDots() {
+function LandDots({ explode }: { explode: boolean }) {
   const pts = useLandDots();
   const ref = useRef<THREE.InstancedMesh>(null);
-  useLayoutEffect(() => {
+  const mat = useRef<THREE.MeshBasicMaterial>(null);
+  const t = useRef(0);
+  const speed = useMemo(() => pts.map(() => 1.5 + Math.random() * 5), [pts]);
+  const place = (k: number) => {
     const m = ref.current;
     if (!m) return;
     const o = new THREE.Object3D();
     pts.forEach((p, i) => {
-      o.position.copy(p);
-      o.lookAt(p.clone().multiplyScalar(2));
+      o.position.copy(p).multiplyScalar(1 + k * k * speed[i]);
+      o.lookAt(p.clone().multiplyScalar(2 + k * 10));
       o.updateMatrix();
       m.setMatrixAt(i, o.matrix);
     });
     m.instanceMatrix.needsUpdate = true;
-  }, [pts]);
+  };
+  useLayoutEffect(() => place(0), [pts]);
+  // Explosion: Lichtpunkte fliegen mit zufälliger Geschwindigkeit nach außen und verblassen.
+  useFrame((_, dt) => {
+    if (!explode && t.current === 0) return;
+    t.current = explode ? Math.min(1, t.current + dt / 1.1) : 0;
+    place(t.current);
+    if (mat.current) mat.current.opacity = 0.85 * (1 - t.current);
+  });
   return (
     <instancedMesh ref={ref} args={[undefined, undefined, pts.length]}>
       <circleGeometry args={[0.0105, 6]} />
-      <meshBasicMaterial color="#2f8fa3" transparent opacity={0.85} />
+      <meshBasicMaterial ref={mat} color="#2f8fa3" transparent opacity={0.85} />
     </instancedMesh>
   );
 }
@@ -119,9 +135,17 @@ varying vec3 vN; varying vec3 vP;
 uniform vec3 color;
 void main(){ float f = pow(1.0 - abs(dot(normalize(-vP), vN)), 4.0); gl_FragColor = vec4(color, f*0.45); }`;
 
-function Earth() {
+function Earth({ explode }: { explode: boolean }) {
+  const core = useRef<THREE.Group>(null);
+  useFrame((_, dt) => {
+    if (!core.current) return;
+    const target = explode ? 0.001 : 1;
+    const s = THREE.MathUtils.lerp(core.current.scale.x, target, Math.min(1, dt * 4));
+    core.current.scale.setScalar(s);
+  });
   return (
     <group>
+      <group ref={core}>
       <mesh>
         <sphereGeometry args={[R * 0.995, 96, 96]} />
         <meshStandardMaterial color="#06121f" roughness={0.9} metalness={0.1} emissive="#020a14" />
@@ -138,8 +162,9 @@ function Earth() {
           depthWrite={false}
         />
       </mesh>
-      <LandDots />
-      <Borders />
+      </group>
+      <LandDots explode={explode} />
+      {!explode && <Borders />}
     </group>
   );
 }
@@ -736,7 +761,9 @@ export function Globe({
   overview,
   launches,
   mood,
+  explode = false,
 }: {
+  explode?: boolean;
   world: World | undefined;
   events: GeoEvent[] | undefined;
   overview: CountryOverview | undefined;
@@ -754,7 +781,9 @@ export function Globe({
   const selMarket = sel?.type === "market" ? world?.markets.find((m) => m.id === sel.id) : undefined;
   return (
     <group onPointerMissed={() => onSelect(null)}>
-      <Earth />
+      <Earth explode={explode} />
+      {!explode && (
+        <>
       <CountryLayer
         overview={overview}
         show={layers.countries}
@@ -802,6 +831,8 @@ export function Globe({
         .map((ev) => (
           <EventMarker key={ev.id} ev={ev} selected={sel?.type === "event" && sel.id === ev.id} onClick={() => onSelect({ type: "event", id: ev.id })} />
         ))}
+        </>
+      )}
     </group>
   );
 }

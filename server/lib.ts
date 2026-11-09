@@ -1,3 +1,6 @@
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 // Gemeinsame Helfer: Abruf mit Zeitlimit, Cache mit Altbestand, gedrosselte Warteschlange.
 
 const UA = "marktwelt/0.1 (privates Dashboard)";
@@ -93,4 +96,36 @@ export const num = (s: string | null | undefined): number | null => {
 
 export async function settle<T>(items: T[], fn: (t: T) => Promise<unknown>) {
   return Promise.all(items.map((t) => fn(t).catch((e: Error) => ({ error: e.message }))));
+}
+
+// ---------- Plattencache für große, selten wechselnde Datensätze ----------
+
+
+const CACHE_DIR = fileURLToPath(new URL("../.cache/", import.meta.url));
+
+/**
+ * Wie `cached`, hält den Wert aber zusätzlich als Datei in `.cache/`, damit ein Neustart
+ * des Servers keine großen Downloads auslöst (CelesTrak, BKG und andere bitten darum).
+ */
+export function diskCached<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<T> {
+  return cached(`disk:${key}`, ttlMs, async () => {
+    const file = join(CACHE_DIR, `${key.replace(/[^\w.-]/g, "_")}.json`);
+    const s = await stat(file).catch(() => null);
+    if (s && Date.now() - s.mtimeMs < ttlMs) return JSON.parse(await readFile(file, "utf8")) as T;
+    try {
+      const value = await load();
+      await mkdir(CACHE_DIR, { recursive: true });
+      await writeFile(file, JSON.stringify(value));
+      return value;
+    } catch (e) {
+      if (s) return JSON.parse(await readFile(file, "utf8")) as T; // alter Stand ist besser als nichts
+      throw e;
+    }
+  });
+}
+
+export async function getBuffer(url: string, timeoutMs = 60000): Promise<Uint8Array> {
+  const res = await fetch(url, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(timeoutMs) });
+  if (!res.ok) throw new Error(`${res.status} ${url}`);
+  return new Uint8Array(await res.arrayBuffer());
 }

@@ -3,6 +3,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { indicators, pctRank, percentile, sma, thin } from "./analytics.ts";
 import { countryDetail, countryOverview, warmCountries } from "./countries.ts";
 import { events } from "./events.ts";
+import { germanyBase, germanyNet, roadworks } from "./germany.ts";
+import { satellites } from "./space.ts";
 import { extended } from "./extended.ts";
 import { launches } from "./launches.ts";
 import { settle } from "./lib.ts";
@@ -235,6 +237,10 @@ const routes: [RegExp, string[], Handler][] = [
   [/^\/api\/predictions$/, [], () => predictions()],
   [/^\/api\/events$/, [], () => events()],
   [/^\/api\/launches$/, [], () => launches()],
+  [/^\/api\/satellites$/, [], () => satellites()],
+  [/^\/api\/de\/base$/, [], () => germanyBase()],
+  [/^\/api\/de\/netz$/, [], () => germanyNet()],
+  [/^\/api\/de\/baustellen$/, [], () => roadworks()],
   [/^\/api\/countries$/, [], () => countryOverview()],
   [/^\/api\/country\/([A-Za-z]{3})$/, ["iso3"], ({ iso3 }) => countryDetail(iso3)],
   [

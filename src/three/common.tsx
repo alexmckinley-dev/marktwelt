@@ -108,7 +108,7 @@ export function useHover() {
   return [hover, bind] as const;
 }
 
-export function Starfield({ count = 2500, radius = 60 }) {
+export function Starfield({ count = 2500, radius = 60, px = 0 }: { count?: number; radius?: number; px?: number }) {
   const geo = useMemo(() => {
     const p = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
@@ -121,7 +121,7 @@ export function Starfield({ count = 2500, radius = 60 }) {
   }, [count, radius]);
   return (
     <points geometry={geo}>
-      <pointsMaterial size={0.12} color="#9fb7d9" transparent opacity={0.7} sizeAttenuation depthWrite={false} />
+      <pointsMaterial size={px || 0.12} color="#9fb7d9" transparent opacity={0.7} sizeAttenuation={!px} depthWrite={false} fog={false} />
     </points>
   );
 }

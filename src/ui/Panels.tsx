@@ -3,6 +3,8 @@ import { big, changeColor, dateDe, fmt, moodColor, parseBig, pct, signed, weekda
 import { EXT, tilesFor } from "../three/StockChart";
 import { ALERT_DE, CONFLICT_RGB, EVENT_KIND, POSITIVE_RGB, inCountry, type GlobeSel } from "../three/Globe";
 import { Spark } from "./Spark";
+import { SwarmTable } from "./SpacePanels";
+import type { Satellites } from "../api";
 
 const Chg = ({ v, d = 2 }: { v: number | null | undefined; d?: number }) => <span style={{ color: changeColor(v) }}>{pct(v, d, false)}</span>;
 
@@ -118,7 +120,9 @@ function WorldPanelInner({
   mood,
   tab,
   setTab,
+  sats,
 }: {
+  sats?: Satellites;
   world: World | undefined;
   heat: HotspotHeat[] | undefined;
   predictions: Prediction[] | undefined;
@@ -238,7 +242,7 @@ function WorldPanelInner({
   if (tab === "maerkte") return <>{tabs}<MarketsTab world={world} mood={mood} onSel={onSel} /></>;
   if (tab === "notenbanken") return <>{tabs}<BanksTab world={world} onSel={onSel} /></>;
   if (tab === "ereignisse") return <>{tabs}{events ? <EventsTab data={events} onSel={(id) => onSel({ type: "event", id })} /> : <Loading />}</>;
-  if (tab === "raumfahrt") return <>{tabs}{launches ? <SpaceTab data={launches} onSel={(id) => onSel({ type: "launch", id })} /> : <Loading />}</>;
+  if (tab === "raumfahrt") return <>{tabs}{launches ? <SpaceTab data={launches} sats={sats} onSel={(id) => onSel({ type: "launch", id })} onGlobe={onSel} /> : <Loading />}</>;
 
   const heatMap = new Map(heat?.map((h) => [h.id, h]) ?? []);
   return (
@@ -527,7 +531,7 @@ function EventsTab({ data, onSel }: { data: Events; onSel: (id: string) => void 
   );
 }
 
-function SpaceTab({ data, onSel }: { data: Launches; onSel: (id: string) => void }) {
+function SpaceTab({ data, sats, onSel, onGlobe }: { data: Launches; sats?: Satellites; onSel: (id: string) => void; onGlobe: (s: GlobeSel) => void }) {
   const all = data.sites
     .flatMap((s) => s.launches.map((l) => ({ l, s })))
     .sort((a, b) => a.l.net.localeCompare(b.l.net));
@@ -539,6 +543,27 @@ function SpaceTab({ data, onSel }: { data: Launches; onSel: (id: string) => void
   const topProv = [...providers.entries()].sort((a, b) => b[1] - a[1])[0];
   return (
     <>
+      <h2>Im All</h2>
+      <div className="actions">
+        <button onClick={() => onGlobe({ type: "body", id: "system" })}>Ins Sonnensystem rauszoomen</button>
+      </div>
+      {sats && (
+        <>
+          <h3>Große Objekte</h3>
+          <table className="click">
+            <tbody>
+              {sats.named.map((n) => (
+                <tr key={n.id} onClick={() => onGlobe({ type: "sat", id: n.id })}>
+                  <td>{n.name}</td>
+                  <td className="dim">{n.kind}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <SwarmTable data={sats} />
+          <p className="dim small">Bahnen von CelesTrak, live gerechnet. Höhen im Bild gestaucht.</p>
+        </>
+      )}
       <h2>Raketenstarts</h2>
       <div className="summary">
         <p>

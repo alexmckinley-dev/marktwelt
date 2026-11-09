@@ -1,7 +1,7 @@
-import { ok, useApi, type Extended, type Earning, type Hotspot, type HotspotDetail, type HotspotHeat, type Prediction, type Macro, type MarketDetail, type Sector, type SectorDetail, type Sentiment, type Stock, type World } from "../api";
+import { ok, useApi, type Events, type Extended, type GeoEvent, type Earning, type Hotspot, type HotspotDetail, type HotspotHeat, type Prediction, type Macro, type MarketDetail, type Sector, type SectorDetail, type Sentiment, type Stock, type World } from "../api";
 import { big, changeColor, dateDe, fmt, moodColor, parseBig, pct, signed, weekdayDe } from "../format";
 import { EXT, tilesFor } from "../three/StockChart";
-import type { GlobeSel } from "../three/Globe";
+import { ALERT_DE, EVENT_KIND, type GlobeSel } from "../three/Globe";
 import { Spark } from "./Spark";
 
 const Chg = ({ v, d = 2 }: { v: number | null | undefined; d?: number }) => <span style={{ color: changeColor(v) }}>{pct(v, d, false)}</span>;
@@ -99,10 +99,14 @@ export function WorldPanel({
   detail,
   onDrill,
   predictions,
+  events,
+  onMap,
 }: {
   world: World | undefined;
   heat: HotspotHeat[] | undefined;
   predictions: Prediction[] | undefined;
+  events: Events | undefined;
+  onMap: () => void;
   sel: GlobeSel;
   onSel: (s: GlobeSel) => void;
   detail: MarketDetail | undefined;
@@ -177,6 +181,10 @@ export function WorldPanel({
       </>
     );
   }
+  if (sel?.type === "event") {
+    const ev = events?.events.find((x) => x.id === sel.id);
+    if (ev) return <EventPanel ev={ev} />;
+  }
   if (sel?.type === "hotspot") {
     const h = world.hotspots.find((x) => x.id === sel.id)!;
     return <HotspotPanel key={h.id} h={h} predictions={predictions?.filter((p) => p.hotspots.includes(h.id))} />;
@@ -189,8 +197,11 @@ export function WorldPanel({
       <h2>Weltlage</h2>
       <p className="dim small">
         Säulen: Märkte (Höhe = Tagesbewegung). Goldene Ringe: Notenbanken (Größe = Zins). Glut: geopolitische Brennpunkte (Nachrichtenlage 24 h), violetter Ring:
-        Prognosemärkte dazu. Tore: Engpässe des Seehandels.
+        Prognosemärkte dazu. Tore: Engpässe des Seehandels. Flache Ringe: Erdbeben und Naturkatastrophen, pulsierend bei starken Ereignissen.
       </p>
+      <div className="actions">
+        <button onClick={onMap}>Lagekarte mit Konflikten öffnen</button>
+      </div>
       <h3>Märkte heute</h3>
       <table className="click">
         <tbody>
@@ -239,6 +250,60 @@ export function WorldPanel({
           <Predictions items={predictions.slice(0, 8)} />
         </>
       )}
+      {events && <EventList data={events} onSel={(id) => onSel({ type: "event", id })} />}
+    </>
+  );
+}
+
+// ---------- Naturereignisse ----------
+
+const sevOf = (e: GeoEvent) => (e.mag != null ? (e.mag - 4.5) / 3 : e.alert === "red" ? 1 : e.alert === "orange" ? 0.6 : 0.25);
+
+function EventList({ data, onSel }: { data: Events; onSel: (id: string) => void }) {
+  const quakes = data.events.filter((e) => e.kind === "beben").sort((a, b) => (b.mag ?? 0) - (a.mag ?? 0)).slice(0, 6);
+  const other = data.events.filter((e) => e.kind !== "beben").sort((a, b) => sevOf(b) - sevOf(a) || b.time.localeCompare(a.time)).slice(0, 8);
+  const row = (e: GeoEvent) => (
+    <tr key={e.id} onClick={() => onSel(e.id)}>
+      <td>
+        <span style={{ color: EVENT_KIND[e.kind].color }}>●</span> {e.kind === "beben" ? e.name.replace(/^M [\d.]+ · /, "") : e.name}
+      </td>
+      <td className="dim">{e.mag != null ? `M ${fmt(e.mag, 1)}` : e.alert ? ALERT_DE[e.alert] : ""}</td>
+    </tr>
+  );
+  return (
+    <>
+      <h3>Erdbeben, 7 Tage</h3>
+      <table className="click"><tbody>{quakes.map(row)}</tbody></table>
+      <h3>Naturkatastrophen</h3>
+      <table className="click"><tbody>{other.map(row)}</tbody></table>
+      <p className="dim small">
+        Quellen: USGS (ab Magnitude 4,5) und GDACS (Stürme, Fluten, Vulkane, Dürren, Waldbrände ab Orange; laufende Ereignisse).
+        {data.errors.length > 0 && <span className="warn"> {data.errors.join(" · ")}</span>}
+      </p>
+    </>
+  );
+}
+
+function EventPanel({ ev }: { ev: GeoEvent }) {
+  const k = EVENT_KIND[ev.kind];
+  return (
+    <>
+      <h2>{ev.name}</h2>
+      <p style={{ color: k.color }}>{k.name}</p>
+      <table>
+        <tbody>
+          {ev.mag != null && <tr><td>Magnitude</td><td>{fmt(ev.mag, 1)}</td></tr>}
+          {ev.alert && <tr><td>Warnstufe</td><td>{ALERT_DE[ev.alert]}</td></tr>}
+          <tr><td>{ev.kind === "beben" ? "Zeit" : "Letzte Meldung"}</td><td>{new Date(ev.time).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })}</td></tr>
+          <tr><td>Ort</td><td>{fmt(ev.lat, 2)}°, {fmt(ev.lon, 2)}°</td></tr>
+        </tbody>
+      </table>
+      <p className="dim small">
+        Warnstufen von GDACS schätzen die humanitären Folgen (Grün, Orange, Rot), bei Erdbeben die PAGER-Stufe der USGS.{" "}
+        <a className="plain" href={ev.url} target="_blank" rel="noreferrer">
+          Bericht der Quelle
+        </a>
+      </p>
     </>
   );
 }

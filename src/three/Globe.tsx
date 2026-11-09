@@ -6,14 +6,24 @@ import { feature, mesh } from "topojson-client";
 import type { GeometryCollection, Topology } from "topojson-specification";
 import countries from "world-atlas/countries-110m.json";
 import land from "world-atlas/land-110m.json";
-import { ok, type Bank, type HotspotHeat, type MarketDetail, type Prediction, type World } from "../api";
+import { ok, type Bank, type GeoEvent, type HotspotHeat, type MarketDetail, type Prediction, type World } from "../api";
 import { changeColor, fmt, mix, pct } from "../format";
 import { Burst, Label, Pulse, latLon, upTo, useHover } from "./common";
 
 export const R = 2;
 
-export type Layers = { markets: boolean; banks: boolean; hotspots: boolean; chokepoints: boolean };
-export type GlobeSel = { type: "market" | "bank" | "hotspot"; id: string } | null;
+export type Layers = { markets: boolean; banks: boolean; hotspots: boolean; chokepoints: boolean; quakes: boolean; disasters: boolean };
+export type GlobeSel = { type: "market" | "bank" | "hotspot" | "event"; id: string } | null;
+
+export const EVENT_KIND: Record<GeoEvent["kind"], { name: string; color: string }> = {
+  beben: { name: "Erdbeben", color: "#f5a742" },
+  sturm: { name: "Tropensturm", color: "#8fd0ff" },
+  flut: { name: "Flut", color: "#3d8bff" },
+  vulkan: { name: "Vulkan", color: "#ff5a2b" },
+  duerre: { name: "Dürre", color: "#c9a46b" },
+  feuer: { name: "Waldbrand", color: "#ff7a3d" },
+};
+export const ALERT_DE = { green: "Grün", orange: "Orange", red: "Rot" } as const;
 
 // ---------- Erde aus Punkten ----------
 
@@ -327,6 +337,55 @@ function ChokeGate({
   );
 }
 
+/** Naturereignis: flacher Ring auf der Oberfläche, Größe nach Stärke bzw. Warnstufe. */
+function EventMarker({ ev, selected, onClick }: { ev: GeoEvent; selected: boolean; onClick: () => void }) {
+  const [hover, bind] = useHover();
+  const p = latLon(ev.lat, ev.lon, R * 1.002);
+  const q = upTo(p);
+  const k = EVENT_KIND[ev.kind];
+  const sev = ev.mag != null ? Math.max(0, ev.mag - 4.5) / 3 : ev.alert === "red" ? 1 : ev.alert === "orange" ? 0.6 : 0.25;
+  const r = 0.018 + Math.min(1, sev) * 0.05;
+  const loud = sev >= 0.5 || ev.alert === "orange" || ev.alert === "red";
+  const ring = (
+    <mesh rotation={[-Math.PI / 2, 0, 0]}>
+      <ringGeometry args={[r * 0.55, r, 28]} />
+      <meshBasicMaterial color={k.color} transparent opacity={hover || selected ? 1 : 0.75} side={THREE.DoubleSide} toneMapped={false} />
+    </mesh>
+  );
+  return (
+    <group position={p} quaternion={q}>
+      <mesh
+        {...bind}
+        position={[0, 0.006, 0]}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClick();
+        }}
+      >
+        <sphereGeometry args={[r * 0.45, 12, 12]} />
+        <meshStandardMaterial color={k.color} emissive={k.color} emissiveIntensity={hover || selected ? 3 : 1.4} toneMapped={false} />
+      </mesh>
+      {loud ? (
+        <Pulse speed={1.4} amp={0.35}>
+          {ring}
+        </Pulse>
+      ) : (
+        ring
+      )}
+      {(hover || selected) && (
+        <Label position={[0, r + 0.1, 0]}>
+          <b>{ev.name}</b>
+          <br />
+          <small>
+            {k.name}
+            {ev.alert ? ` · Warnstufe ${ALERT_DE[ev.alert]}` : ""} · {new Date(ev.time).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" })}
+          </small>
+        </Label>
+      )}
+    </group>
+  );
+}
+
 /** Explosionsansicht über einem Markt: vier Performance-Säulen fliegen aus dem Pfeiler. */
 function MarketBurst({ lat, lon, detail }: { lat: number; lon: number; detail: MarketDetail | undefined }) {
   const p = latLon(lat, lon, R);
@@ -370,8 +429,10 @@ export function Globe({
   onSelect,
   marketDetail,
   predictions,
+  events,
 }: {
   world: World | undefined;
+  events: GeoEvent[] | undefined;
   heat: HotspotHeat[] | undefined;
   predictions: Prediction[] | undefined;
   layers: Layers;
@@ -416,6 +477,11 @@ export function Globe({
         if (h.kind === "engpass") return layers.chokepoints ? <ChokeGate key={h.id} {...common} /> : null;
         return layers.hotspots ? <HotspotOrb key={h.id} {...common} /> : null;
       })}
+      {events
+        ?.filter((ev) => (ev.kind === "beben" ? layers.quakes : layers.disasters))
+        .map((ev) => (
+          <EventMarker key={ev.id} ev={ev} selected={sel?.type === "event" && sel.id === ev.id} onClick={() => onSelect({ type: "event", id: ev.id })} />
+        ))}
     </group>
   );
 }

@@ -6,11 +6,11 @@ Globale Kapitalmärkte in 3D, von der Weltlage bis zur Einzelaktie. Jedes Elemen
 
 | Ansicht | Was man sieht | Ein Klick tiefer |
 |---|---|---|
-| **Welt** | Erde aus Lichtpunkten. Säulen: 28 Ländermärkte (Höhe = Tagesbewegung). Goldene Ringe: zehn Notenbanken (Größe = Zins). Glut: neun geopolitische Brennpunkte (Nachrichtenlage 24 h), violetter Ring: Prognosemärkte dazu. Tore: sechs Engpässe des Seehandels (Hormus, Bab al-Mandab, Suez, Malakka, Panama, Bosporus). | Markt: Performance-Säulen springen heraus, dann 3D-Chart. Notenbank: Zins, letzte Änderung, Verlauf. Brennpunkt und Engpass: Prognosemärkte, Schlagzeilen, bei Engpässen Öl oder Weizen. |
+| **Welt** | Erde aus Lichtpunkten. Säulen: 28 Ländermärkte (Höhe = Tagesbewegung). Goldene Ringe: zehn Notenbanken (Größe = Zins). Glut: neun geopolitische Brennpunkte (Nachrichtenlage 24 h), violetter Ring: Prognosemärkte dazu. Tore: sechs Engpässe des Seehandels (Hormus, Bab al-Mandab, Suez, Malakka, Panama, Bosporus). Flache Ringe: Erdbeben ab M 4,5 und laufende Naturkatastrophen. Knopf im Panel: Lagekarte mit Konflikten. | Markt: Performance-Säulen springen heraus, dann 3D-Chart. Notenbank: Zins, letzte Änderung, Verlauf. Brennpunkt und Engpass: Prognosemärkte, Schlagzeilen, bei Engpässen Öl oder Weizen. Ereignis: Stärke, Warnstufe, Bericht der Quelle. |
 | **Stimmung** | Eigener Angst-und-Gier-Index als Tacho mit Kern | Kern sprengt sich in sechs Teilgrößen: VIX, Laufzeitstruktur VIX zu VIX3M, Hochzins-Spread, Momentum, sichere Häfen, Marktbreite |
 | **Sektoren** | S&P 500 als Kugel aus elf Sektor-Schnitzen | Kern: Kugel zerfällt. Schnitz: größte Werte des Sektors als Kugeln (Größe = Börsenwert). Kugel: Einzelaktie. |
 | **Termine** | Quartalszahlen der nächsten zwei Wochen als Spirale, ab 10 Mrd. USD Börsenwert | Kugel: Einzelaktie |
-| **Lagekarte** | Freie Einbett-Karte von World Monitor: Konflikte, Erdbeben, Unwetter, stündlich | Ausschnitt und Ebenen im Panel |
+| **Lagekarte** (in der Welt-Ansicht) | Freie Einbett-Karte von World Monitor: Konflikte, Erdbeben, Unwetter, stündlich | Ausschnitt und Ebenen im Panel |
 | **Aktie** | 3D-Kerzenchart mit Volumen, 50- und 200-Tage-Linie, Kennzahlen-Würfel. Außerbörsliche Tage aus Perps oder Futures hängen blau hinterlegt hinten dran; das Panel zeigt den umgerechneten Kurs seit Schluss und eine Stundenkurve über drei Tage | Würfel: sechs Kacheln mit Trend, Performance, RSI, Volatilität, Abstand zum Hoch, Beta |
 
 Unten läuft eine Makro-Leiste mit 15 Reihen (Zinsen, Kurve, Rohstoffe, Devisen, Indizes).
@@ -30,6 +30,8 @@ Alle ohne API-Schlüssel, mit Cache und Drossel im Server.
 | GDELT | Nachrichten zu Brennpunkten und Engpässen; ein Abruf je 10 s, nach Sperre wachsender Rückzug bis 15 min | 60 min |
 | Hyperliquid (`api.hyperliquid.xyz/info`, Börse `xyz` von trade.xyz) | Aktien-, Index- und Rohstoff-Perps rund um die Uhr (rund 120 Werte, z. B. NVDA, SP500, XYZ100, EWJ, GOLD, CL), Stundenkerzen | 1 min Kurse, 5 min Kerzen |
 | Yahoo Chart (`query1.finance.yahoo.com/v8`) | CME-Futures ES, NQ, YM, RTY, GC, CL als zweiter Bezug, rund 10 min verzögert | 5 min |
+| USGS (`earthquake.usgs.gov`, Feed 4.5_week) | Erdbeben ab Magnitude 4,5, sieben Tage | 15 min |
+| GDACS (`gdacs.org/gdacsapi`) | Laufende Tropenstürme, Fluten, Vulkane, Dürren; Waldbrände ab Orange | 30 min |
 | World Monitor (`/embed`) | Lagekarte als iframe, freie Stufe ohne Schlüssel | stündlich |
 
 Ländermärkte erscheinen über US-gelistete Länder-ETFs (iShares MSCI …), also in USD. Kurse sind verzögert.

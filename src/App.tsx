@@ -11,6 +11,7 @@ import {
   type Macro,
   type MarketDetail,
   type Prediction,
+  type Events,
   type Sector,
   type SectorDetail,
   type Sentiment,
@@ -39,8 +40,8 @@ const TABS: { k: View["k"]; name: string }[] = [
   { k: "stimmung", name: "Stimmung" },
   { k: "sektoren", name: "Sektoren" },
   { k: "termine", name: "Termine" },
-  { k: "lage", name: "Lagekarte" },
 ];
+const viewName = (k: View["k"]) => (k === "lage" ? "Lagekarte" : TABS.find((t) => t.k === k)?.name ?? k);
 
 const toHash = (v: View) => (v.k === "aktie" ? `#/aktie/${v.symbol}` : v.k === "markt" ? `#/markt/${v.id}` : `#/${v.k}`);
 function fromHash(): View {
@@ -75,7 +76,7 @@ export default function App() {
 
   // Auswahl je Szene
   const [globeSel, setGlobeSel] = useState<GlobeSel>(null);
-  const [layers, setLayers] = useState<Layers>({ markets: true, banks: true, hotspots: true, chokepoints: true });
+  const [layers, setLayers] = useState<Layers>({ markets: true, banks: true, hotspots: true, chokepoints: true, quakes: true, disasters: true });
   const [lageLayers, setLageLayers] = useState<string[]>(["conflicts", "earthquakes", "weather"]);
   const [lageView, setLageView] = useState("welt");
   const [moodOpen, setMoodOpen] = useState(false);
@@ -89,6 +90,7 @@ export default function App() {
   const world = useApi<World>("world", 5 * 60_000);
   const heat = useApi<HotspotHeat[]>("hotspots", 30_000);
   const macro = useApi<Macro[]>("macro", 30 * 60_000);
+  const evts = useApi<Events>(view.k === "welt" ? "events" : null, 15 * 60_000);
   const preds = useApi<Prediction[]>(view.k === "welt" ? "predictions" : null, 15 * 60_000);
   const mood = useApi<Sentiment>(view.k === "stimmung" ? "sentiment" : null);
   const sectors = useApi<Sector[]>(view.k === "sektoren" ? "sectors" : null, 5 * 60_000);
@@ -109,7 +111,9 @@ export default function App() {
             ? world.data.markets.find((m) => m.id === globeSel.id)
             : globeSel.type === "bank"
               ? world.data.banks.find((b) => b.id === globeSel.id)
-              : world.data.hotspots.find((h) => h.id === globeSel.id);
+              : globeSel.type === "event"
+                ? evts.data?.events.find((e) => e.id === globeSel.id)
+                : world.data.hotspots.find((h) => h.id === globeSel.id);
         if (item) {
           const p = latLon(item.lat, item.lon, R);
           return { pos: p.clone().normalize().multiplyScalar(4.4).add(V(0, 0.6, 0)), target: p.clone().multiplyScalar(0.55), key: `w-${globeSel.id}` };
@@ -126,11 +130,11 @@ export default function App() {
     if (view.k === "lage") return { pos: V(0, 1.4, 6.6), target: V(0, 0, 0), key: "l" };
     if (view.k === "termine") return { pos: V(7.5, 2.5, 7.5), target: V(0, 0, 0), key: "t" };
     return cubeOpen ? { pos: V(4.6, 1.2, 7.5), target: V(4.6, 0.6, 0), key: "a-open" } : { pos: V(0.9, 1.4, 11.5), target: V(0.9, 0.2, 0), key: `a-${view.k}` };
-  }, [view, globeSel, world.data, moodOpen, secExploded, secSel, sectors.data, cubeOpen]);
+  }, [view, globeSel, world.data, evts.data, moodOpen, secExploded, secSel, sectors.data, cubeOpen]);
 
   const openStock = (s: string) => go({ k: "aktie", symbol: s.toUpperCase() });
   const crumbs = stack.map((v) =>
-    v.k === "aktie" ? v.symbol : v.k === "markt" ? world.data?.markets.find((m) => m.id === v.id)?.name ?? v.id : TABS.find((t) => t.k === v.k)!.name,
+    v.k === "aktie" ? v.symbol : v.k === "markt" ? world.data?.markets.find((m) => m.id === v.id)?.name ?? v.id : viewName(v.k),
   );
   const chart = view.k === "aktie" ? stock.data : view.k === "markt" ? market.data : undefined;
   const spyQuote = world.data?.markets.find((m) => m.id === "us")?.quote;
@@ -143,7 +147,7 @@ export default function App() {
         </div>
         <nav>
           {TABS.map((t) => (
-            <button key={t.k} className={view.k === t.k ? "on" : ""} onClick={() => go({ k: t.k } as View, false)}>
+            <button key={t.k} className={view.k === t.k || (t.k === "welt" && view.k === "lage") ? "on" : ""} onClick={() => go({ k: t.k } as View, false)}>
               {t.name}
             </button>
           ))}
@@ -178,6 +182,8 @@ export default function App() {
                 ["banks", "Notenbanken"],
                 ["hotspots", "Brennpunkte"],
                 ["chokepoints", "Engpässe"],
+                ["quakes", "Erdbeben"],
+                ["disasters", "Katastrophen"],
               ] as const
             ).map(([k, n]) => (
               <label key={k}>
@@ -206,7 +212,7 @@ export default function App() {
           <CameraRig position={cam.pos} target={cam.target} flyKey={cam.key} />
 
           {view.k === "welt" && (
-            <Globe world={world.data} heat={heat.data} predictions={preds.data} layers={layers} sel={globeSel} onSelect={setGlobeSel} marketDetail={market.data} />
+            <Globe world={world.data} heat={heat.data} predictions={preds.data} events={evts.data?.events} layers={layers} sel={globeSel} onSelect={setGlobeSel} marketDetail={market.data} />
           )}
           {view.k === "stimmung" && <SentimentScene data={mood.data} open={moodOpen} setOpen={setMoodOpen} selected={moodSel} onSelect={setMoodSel} />}
           {view.k === "sektoren" && (
@@ -243,6 +249,8 @@ export default function App() {
               world={world.data}
               heat={heat.data}
               predictions={preds.data}
+              events={evts.data}
+              onMap={() => go({ k: "lage" })}
               sel={globeSel}
               onSel={setGlobeSel}
               detail={market.data}
@@ -272,7 +280,7 @@ export default function App() {
 
       <footer>
         <MacroStrip data={macro.data} />
-        <div className="src dim">Daten: Nasdaq (Kurse, verzögert), FRED, EZB, BIS, Cboe, GDELT, Polymarket, Lagekarte von World Monitor · keine Anlageberatung</div>
+        <div className="src dim">Daten: Nasdaq (Kurse, verzögert), FRED, EZB, BIS, Cboe, GDELT, Polymarket, Hyperliquid, CME über Yahoo, USGS, GDACS, Lagekarte von World Monitor · keine Anlageberatung</div>
       </footer>
     </div>
   );

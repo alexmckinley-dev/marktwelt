@@ -1,6 +1,7 @@
 // API-Routen. Wird vom Vite-Dev-Server als Middleware und von server/index.ts genutzt.
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { indicators, pctRank, percentile, sma, thin } from "./analytics.ts";
+import { events } from "./events.ts";
 import { extended } from "./extended.ts";
 import { settle } from "./lib.ts";
 import { bisRates, cboeSeries, earnings, ecbSeries, fredSeries, gdeltStatus, history, news, predictions, quote, summary, type Point } from "./sources.ts";
@@ -229,6 +230,7 @@ const routes: [RegExp, string[], Handler][] = [
   ],
   [/^\/api\/sentiment$/, [], () => sentiment()],
   [/^\/api\/predictions$/, [], () => predictions()],
+  [/^\/api\/events$/, [], () => events()],
   [
     /^\/api\/sectors$/,
     [],
@@ -343,4 +345,5 @@ export function warmUp() {
   for (const h of HOTSPOTS) news(h.query).catch(() => {});
   bisRates().catch(() => {});
   predictions().catch(() => {});
+  events().catch(() => {});
 }

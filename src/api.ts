@@ -93,6 +93,19 @@ export type SectorDetail = {
   members: { symbol: string; quote: Maybe<Quote>; marketCap: string | null }[];
 };
 
+export type GeoEvent = {
+  id: string;
+  kind: "beben" | "sturm" | "flut" | "vulkan" | "duerre" | "feuer";
+  name: string;
+  lat: number;
+  lon: number;
+  mag: number | null;
+  alert: "green" | "orange" | "red" | null;
+  time: string;
+  url: string;
+};
+export type Events = { events: GeoEvent[]; errors: string[] };
+
 export type Bar = { d: string; o: number; h: number; l: number; c: number; v: number; x?: "off" | "mixed" };
 export type ExtSource = {
   kind: "perp" | "future";

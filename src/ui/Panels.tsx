@@ -118,7 +118,6 @@ function WorldPanelInner({
   mood,
   tab,
   setTab,
-  onMood,
 }: {
   world: World | undefined;
   heat: HotspotHeat[] | undefined;
@@ -129,7 +128,6 @@ function WorldPanelInner({
   mood: Sentiment | undefined;
   tab: string;
   setTab: (t: string) => void;
-  onMood: () => void;
   onMap: () => void;
   sel: GlobeSel;
   onSel: (s: GlobeSel) => void;
@@ -219,7 +217,7 @@ function WorldPanelInner({
     const site = launches?.sites.find((x) => x.id === sel.id);
     if (site) return <LaunchPanel site={site} />;
   }
-  if (sel?.type === "mood") return <MoodPanel data={mood} onOpen={onMood} />;
+  if (sel?.type === "mood") return <MoodPanel data={mood} />;
 
   const TABS_W: [string, string][] = [
     ["lage", "Lage"],
@@ -612,7 +610,7 @@ function LaunchPanel({ site }: { site: LaunchSite }) {
   );
 }
 
-function MoodPanel({ data, onOpen }: { data: Sentiment | undefined; onOpen: () => void }) {
+function MoodPanel({ data }: { data: Sentiment | undefined }) {
   if (!data) return <Loading />;
   return (
     <>
@@ -620,7 +618,10 @@ function MoodPanel({ data, onOpen }: { data: Sentiment | undefined; onOpen: () =
       <div className="hero" style={{ color: moodColor(data.score) }}>
         {data.score ?? "–"} <small>{data.label}</small>
       </div>
-      <p className="dim small">Eigener Angst-und-Gier-Index, 0 = extreme Angst, 100 = extreme Gier. Stand {dateDe(data.asOf)}.</p>
+      <p className="dim small">
+        Eigener Angst-und-Gier-Index aus {data.parts.length} Marktgrößen, jede als Rang im Jahresvergleich (0 = größte Angst des Jahres, 100 = größte Gier). Er kreist als
+        Mond um die Erde; Farbe und Ring zeigen den Wert.
+      </p>
       {data.parts.map((p) => (
         <div key={p.id} className="part">
           <div className="row">
@@ -630,12 +631,14 @@ function MoodPanel({ data, onOpen }: { data: Sentiment | undefined; onOpen: () =
           <div className="bar">
             <i style={{ width: `${p.score}%`, background: moodColor(p.score) }} />
           </div>
-          <small className="dim">{p.value}</small>
+          <small className="dim">
+            {p.value} · {p.explain}
+          </small>
         </div>
       ))}
-      <div className="actions">
-        <button onClick={onOpen}>Stimmung in 3D aufklappen</button>
-      </div>
+      <h3>VIX, 12 Monate</h3>
+      <Spark points={data.vixHistory} width={300} height={60} color="#ff6a3d" />
+      <p className="dim small">Stand {dateDe(data.asOf)}</p>
     </>
   );
 }
@@ -929,40 +932,6 @@ function HotspotPanel({ h, predictions }: { h: Hotspot; predictions: Prediction[
           </li>
         ))}
       </ul>
-    </>
-  );
-}
-
-// ---------- Stimmung ----------
-
-export function SentimentPanel({ data, error, selected }: { data: Sentiment | undefined; error?: string; selected: string | null }) {
-  if (!data) return <Loading error={error} />;
-  return (
-    <>
-      <h2>Stimmungsbarometer</h2>
-      <div className="hero" style={{ color: moodColor(data.score) }}>
-        {data.score ?? "–"} <small>{data.label}</small>
-      </div>
-      <p className="dim small">
-        Eigener Index aus {data.parts.length} Marktgrößen, jede als Rang im Jahresvergleich (0 = größte Angst des Jahres, 100 = größte Gier). Kern anklicken, um ihn aufzuspalten.
-      </p>
-      {data.parts.map((p) => (
-        <div key={p.id} className={`part ${selected === p.id ? "sel" : ""}`}>
-          <div className="row">
-            <span>{p.name}</span>
-            <b style={{ color: moodColor(p.score) }}>{p.score}</b>
-          </div>
-          <div className="bar">
-            <i style={{ width: `${p.score}%`, background: moodColor(p.score) }} />
-          </div>
-          <small className="dim">
-            {p.value} · {p.explain}
-          </small>
-        </div>
-      ))}
-      <h3>VIX, 12 Monate</h3>
-      <Spark points={data.vixHistory} width={300} height={60} color="#ff6a3d" />
-      <p className="dim small">Stand {dateDe(data.asOf)}</p>
     </>
   );
 }

@@ -25,13 +25,11 @@ import { CameraRig, PanelOffset, Starfield, latLon } from "./three/common";
 import { geoCentroid } from "d3-geo";
 import { Globe, R, countryFeature, type GlobeSel, type Layers } from "./three/Globe";
 import { SectorsScene, sectorFocus } from "./three/Sectors";
-import { SentimentScene } from "./three/Sentiment";
 import { CandleChart, MetricCube } from "./three/StockChart";
-import { CalendarPanel, LAGE_VIEWS, LagePanel, MacroStrip, SectorsPanel, SentimentPanel, StockPanel, WorldPanel } from "./ui/Panels";
+import { CalendarPanel, LAGE_VIEWS, LagePanel, MacroStrip, SectorsPanel, StockPanel, WorldPanel } from "./ui/Panels";
 
 type View =
   | { k: "welt" }
-  | { k: "stimmung" }
   | { k: "sektoren" }
   | { k: "termine" }
   | { k: "lage" }
@@ -40,7 +38,6 @@ type View =
 
 const TABS: { k: View["k"]; name: string }[] = [
   { k: "welt", name: "Welt" },
-  { k: "stimmung", name: "Stimmung" },
   { k: "sektoren", name: "Sektoren" },
   { k: "termine", name: "Termine" },
 ];
@@ -51,7 +48,7 @@ function fromHash(): View {
   const [, k, arg] = location.hash.split("/");
   if (k === "aktie" && arg) return { k, symbol: decodeURIComponent(arg).toUpperCase() };
   if (k === "markt" && arg) return { k, id: arg };
-  if (k === "stimmung" || k === "sektoren" || k === "termine" || k === "lage") return { k };
+  if (k === "sektoren" || k === "termine" || k === "lage") return { k };
   return { k: "welt" };
 }
 
@@ -78,7 +75,8 @@ export default function App() {
   }, []);
 
   // Auswahl je Szene
-  const [globeSel, setGlobeSel] = useState<GlobeSel>(null);
+  // Alte Direktlinks auf die Stimmungsseite öffnen den Stimmungsmond.
+  const [globeSel, setGlobeSel] = useState<GlobeSel>(() => (location.hash.startsWith("#/stimmung") ? { type: "mood", id: "mood" } : null));
   const [layers, setLayers] = useState<Layers>({
     markets: true,
     banks: true,
@@ -92,8 +90,6 @@ export default function App() {
   const [lageLayers, setLageLayers] = useState<string[]>(["conflicts", "earthquakes", "weather"]);
   const [lageView, setLageView] = useState("welt");
   const [worldTab, setWorldTab] = useState("lage");
-  const [moodOpen, setMoodOpen] = useState(false);
-  const [moodSel, setMoodSel] = useState<string | null>(null);
   const [secExploded, setSecExploded] = useState(false);
   const [secSel, setSecSel] = useState<string | null>(null);
   const [cubeOpen, setCubeOpen] = useState(false);
@@ -105,7 +101,7 @@ export default function App() {
   const macro = useApi<Macro[]>("macro", 30 * 60_000);
   const evts = useApi<Events>(view.k === "welt" ? "events" : null, 15 * 60_000);
   const preds = useApi<Prediction[]>(view.k === "welt" ? "predictions" : null, 15 * 60_000);
-  const mood = useApi<Sentiment>(view.k === "stimmung" || view.k === "welt" ? "sentiment" : null, 15 * 60_000);
+  const mood = useApi<Sentiment>(view.k === "welt" ? "sentiment" : null, 15 * 60_000);
   const overview = useApi<CountryOverview>(view.k === "welt" ? "countries" : null, 30 * 60_000);
   const launches = useApi<Launches>(view.k === "welt" ? "launches" : null, 30 * 60_000);
   const sectors = useApi<Sector[]>(view.k === "sektoren" ? "sectors" : null, 5 * 60_000);
@@ -144,7 +140,6 @@ export default function App() {
       }
       return { pos: V(0, 1.4, 6.6), target: V(0, 0, 0), key: "w" };
     }
-    if (view.k === "stimmung") return moodOpen ? { pos: V(0, 3.5, 10), target: V(0, -0.8, 0), key: "s-open" } : { pos: V(0, 0.6, 7.5), target: V(0, 0, 0), key: "s" };
     if (view.k === "sektoren") {
       const f = sectorFocus(sectors.data, secSel);
       if (f) return { pos: f.centre.clone().add(f.dir.clone().multiplyScalar(5)).add(V(0, 1, 0)), target: f.centre, key: `sec-${secSel}` };
@@ -153,7 +148,7 @@ export default function App() {
     if (view.k === "lage") return { pos: V(0, 1.4, 6.6), target: V(0, 0, 0), key: "l" };
     if (view.k === "termine") return { pos: V(7.5, 2.5, 7.5), target: V(0, 0, 0), key: "t" };
     return cubeOpen ? { pos: V(4.6, 1.2, 7.5), target: V(4.6, 0.6, 0), key: "a-open" } : { pos: V(0.9, 1.4, 11.5), target: V(0.9, 0.2, 0), key: `a-${view.k}` };
-  }, [view, globeSel, world.data, evts.data, launches.data, overview.data, moodOpen, secExploded, secSel, sectors.data, cubeOpen]);
+  }, [view, globeSel, world.data, evts.data, launches.data, overview.data, secExploded, secSel, sectors.data, cubeOpen]);
 
   const openStock = (s: string) => go({ k: "aktie", symbol: s.toUpperCase() });
   const crumbs = stack.map((v) =>
@@ -243,7 +238,6 @@ export default function App() {
               mood={mood.data}
               layers={layers} sel={globeSel} onSelect={setGlobeSel} marketDetail={market.data} />
           )}
-          {view.k === "stimmung" && <SentimentScene data={mood.data} open={moodOpen} setOpen={setMoodOpen} selected={moodSel} onSelect={setMoodSel} />}
           {view.k === "sektoren" && (
             <SectorsScene
               sectors={sectors.data}
@@ -284,7 +278,6 @@ export default function App() {
               mood={mood.data}
               tab={worldTab}
               setTab={setWorldTab}
-              onMood={() => go({ k: "stimmung" })}
               onMap={() => go({ k: "lage" })}
               sel={globeSel}
               onSel={setGlobeSel}
@@ -292,7 +285,6 @@ export default function App() {
               onDrill={(to, id) => go(to === "markt" ? { k: "markt", id } : { k: "sektoren" })}
             />
           )}
-          {view.k === "stimmung" && <SentimentPanel data={mood.data} error={mood.error} selected={moodSel} />}
           {view.k === "sektoren" && (
             <SectorsPanel
               sectors={sectors.data}

@@ -64,6 +64,8 @@ Nicht genutzt: Yahoo Finance (Rate-Limit), CNN Fear & Greed und Stooq (sperren a
 
 ## Start
 
+Voraussetzung: Node 24 oder neuer. Schlüssel oder Konten braucht keine Quelle. Der erste Start dauert einige Minuten, weil der Server Karten und Daten einmal lädt und unter `.cache/` ablegt.
+
 ```bash
 npm install
 npm run dev      # http://127.0.0.1:5190, API als Vite-Middleware

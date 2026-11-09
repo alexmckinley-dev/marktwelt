@@ -6,7 +6,7 @@ Globale Kapitalmärkte in 3D, von der Weltlage bis zur Einzelaktie. Jedes Elemen
 
 | Ansicht | Was man sieht | Ein Klick tiefer |
 |---|---|---|
-| **Welt** | Erde aus Lichtpunkten. Säulen: 28 Ländermärkte (Höhe = Tagesbewegung). Goldene Ringe: zehn Notenbanken (Größe = Zins). Glut: neun geopolitische Brennpunkte (Nachrichtenlage 24 h), violetter Ring: Prognosemärkte dazu. Tore: sechs Engpässe des Seehandels (Hormus, Bab al-Mandab, Suez, Malakka, Panama, Bosporus). Flache Ringe: Erdbeben ab M 4,5 und laufende Naturkatastrophen. Knopf im Panel: Lagekarte mit Konflikten. | Markt: Performance-Säulen springen heraus, dann 3D-Chart. Notenbank: Zins, letzte Änderung, Verlauf. Brennpunkt und Engpass: Prognosemärkte, Schlagzeilen, bei Engpässen Öl oder Weizen. Ereignis: Stärke, Warnstufe, Bericht der Quelle. |
+| **Welt** | Erde aus Lichtpunkten. Säulen: 28 Ländermärkte (Höhe = Tagesbewegung). Goldene Ringe: zehn Notenbanken (Größe = Zins). Glut: neun geopolitische Brennpunkte (Nachrichtenlage 24 h), violetter Ring: Prognosemärkte dazu. Tore: sechs Engpässe des Seehandels (Hormus, Bab al-Mandab, Suez, Malakka, Panama, Bosporus). Flache Ringe: Erdbeben ab M 4,5 und laufende Naturkatastrophen. Länderflächen: rot schraffiert bei aktivem Konflikt, grün bei positiven Meldungen. Raketen: Startbasen mit angekündigten Starts. Ein Mond kreist als Stimmungsbarometer. Seitenleiste mit Reitern Lage, Märkte, Notenbanken, Ereignisse, Raumfahrt, je mit Zusammenfassung und Nachrichten. Knopf im Panel: Lagekarte mit Konflikten. | Markt: Performance-Säulen springen heraus, dann 3D-Chart. Notenbank: Zins, letzte Änderung, Verlauf. Brennpunkt und Engpass: Prognosemärkte, Schlagzeilen, bei Engpässen Öl oder Weizen. Ereignis: Stärke, Warnstufe, Bericht der Quelle. Land: Fläche leuchtet, Kennzahlen der Weltbank, Markt und Notenbank, Konflikte, Ereignisse, Startbasen, Nachrichten. Startbasis: Startplan. Mond: Teilwerte der Stimmung. |
 | **Stimmung** | Eigener Angst-und-Gier-Index als Tacho mit Kern | Kern sprengt sich in sechs Teilgrößen: VIX, Laufzeitstruktur VIX zu VIX3M, Hochzins-Spread, Momentum, sichere Häfen, Marktbreite |
 | **Sektoren** | S&P 500 als Kugel aus elf Sektor-Schnitzen | Kern: Kugel zerfällt. Schnitz: größte Werte des Sektors als Kugeln (Größe = Börsenwert). Kugel: Einzelaktie. |
 | **Termine** | Quartalszahlen der nächsten zwei Wochen als Spirale, ab 10 Mrd. USD Börsenwert | Kugel: Einzelaktie |
@@ -32,6 +32,11 @@ Alle ohne API-Schlüssel, mit Cache und Drossel im Server.
 | Yahoo Chart (`query1.finance.yahoo.com/v8`) | CME-Futures ES, NQ, YM, RTY, GC, CL als zweiter Bezug, rund 10 min verzögert | 5 min |
 | USGS (`earthquake.usgs.gov`, Feed 4.5_week) | Erdbeben ab Magnitude 4,5, sieben Tage | 15 min |
 | GDACS (`gdacs.org/gdacsapi`) | Laufende Tropenstürme, Fluten, Vulkane, Dürren; Waldbrände ab Orange | 30 min |
+| Weltbank (`api.worldbank.org/v2`) | Stammdaten und Kennzahlen je Land, jüngster Jahreswert | 24 h |
+| Wikipedia (`List_of_ongoing_armed_conflicts`) | Aktive Konflikte je Land, nach Todeszahl gestuft | 12 h |
+| Good News Network, Positive News, Reasons to be Cheerful, Good Good Good (RSS) | Positive Meldungen, Länder aus Titel und Anriss | 1 h |
+| Launch Library 2 (`ll.thespacedevs.com/2.3.0`) | Angekündigte Raketenstarts mit Startplatz; höchstens 15 Abrufe je Stunde | 30 min |
+| Google News (RSS-Suche, deutsch) | Nachrichten je Thema und je Land | 15 min |
 | World Monitor (`/embed`) | Lagekarte als iframe, freie Stufe ohne Schlüssel | stündlich |
 
 Ländermärkte erscheinen über US-gelistete Länder-ETFs (iShares MSCI …), also in USD. Kurse sind verzögert.

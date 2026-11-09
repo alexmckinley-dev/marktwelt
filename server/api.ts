@@ -1,9 +1,12 @@
 // API-Routen. Wird vom Vite-Dev-Server als Middleware und von server/index.ts genutzt.
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { indicators, pctRank, percentile, sma, thin } from "./analytics.ts";
+import { countryDetail, countryOverview, warmCountries } from "./countries.ts";
 import { events } from "./events.ts";
 import { extended } from "./extended.ts";
+import { launches } from "./launches.ts";
 import { settle } from "./lib.ts";
+import { gnews, TOPICS } from "./rss.ts";
 import { bisRates, cboeSeries, earnings, ecbSeries, fredSeries, gdeltStatus, history, news, predictions, quote, summary, type Point } from "./sources.ts";
 import { CENTRAL_BANKS, HOTSPOTS, MACRO_SERIES, MARKETS, SECTORS } from "./universe.ts";
 
@@ -231,6 +234,18 @@ const routes: [RegExp, string[], Handler][] = [
   [/^\/api\/sentiment$/, [], () => sentiment()],
   [/^\/api\/predictions$/, [], () => predictions()],
   [/^\/api\/events$/, [], () => events()],
+  [/^\/api\/launches$/, [], () => launches()],
+  [/^\/api\/countries$/, [], () => countryOverview()],
+  [/^\/api\/country\/([A-Za-z]{3})$/, ["iso3"], ({ iso3 }) => countryDetail(iso3)],
+  [
+    /^\/api\/news\/(\w+)$/,
+    ["topic"],
+    async ({ topic }) => {
+      const t = TOPICS[topic];
+      if (!t) throw new Error("unbekanntes Thema");
+      return { ...t, items: await gnews(t.query, 20) };
+    },
+  ],
   [
     /^\/api\/sectors$/,
     [],
@@ -346,4 +361,6 @@ export function warmUp() {
   bisRates().catch(() => {});
   predictions().catch(() => {});
   events().catch(() => {});
+  launches().catch(() => {});
+  warmCountries();
 }

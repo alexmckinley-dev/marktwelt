@@ -136,3 +136,16 @@ footer { border-top: 1px solid var(--line); background: rgba(3, 8, 18, 0.92); z-
   .lagemap { top: 8px; left: 8px; width: calc(100% - 16px); height: calc(58% - 28px); }
   .crumbs .layers { display: none; }
 }
+
+/* Seitenleiste: Themen-Reiter, Zusammenfassung, Länder-Chips */
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; margin: 0 0 12px; }
+.tabs button { background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); color: var(--dim, #8fa3b8); border-radius: 6px; padding: 4px 9px; font: inherit; font-size: 12px; cursor: pointer; }
+.tabs button:hover { color: var(--text); }
+.tabs button.on { background: rgba(70, 224, 200, 0.18); border-color: rgba(70, 224, 200, 0.5); color: var(--text); }
+.summary { background: rgba(70, 224, 200, 0.06); border-left: 2px solid rgba(70, 224, 200, 0.55); padding: 8px 10px; margin: 8px 0 12px; border-radius: 0 6px 6px 0; }
+.summary p { margin: 0; line-height: 1.5; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0; }
+.chip { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.15); color: var(--text); border-radius: 12px; padding: 2px 9px; font: inherit; font-size: 12px; cursor: pointer; }
+.chip:hover { background: rgba(255, 255, 255, 0.08); }
+.closebtn { background: none; border: 0; color: var(--accent); font: inherit; font-size: 12px; cursor: pointer; padding: 0; margin: 0 0 8px; }
+.closebtn:hover { text-decoration: underline; }

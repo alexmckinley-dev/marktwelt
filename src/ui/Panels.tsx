@@ -1,7 +1,7 @@
-import { ok, useApi, type Events, type Extended, type GeoEvent, type Earning, type Hotspot, type HotspotDetail, type HotspotHeat, type Prediction, type Macro, type MarketDetail, type Sector, type SectorDetail, type Sentiment, type Stock, type World } from "../api";
+import { ok, useApi, type CountryDetail, type CountryOverview, type Launches, type LaunchSite, type NewsItem, type TopicNews, type Events, type Extended, type GeoEvent, type Earning, type Hotspot, type HotspotDetail, type HotspotHeat, type Prediction, type Macro, type MarketDetail, type Sector, type SectorDetail, type Sentiment, type Stock, type World } from "../api";
 import { big, changeColor, dateDe, fmt, moodColor, parseBig, pct, signed, weekdayDe } from "../format";
 import { EXT, tilesFor } from "../three/StockChart";
-import { ALERT_DE, EVENT_KIND, type GlobeSel } from "../three/Globe";
+import { ALERT_DE, CONFLICT_RGB, EVENT_KIND, POSITIVE_RGB, inCountry, type GlobeSel } from "../three/Globe";
 import { Spark } from "./Spark";
 
 const Chg = ({ v, d = 2 }: { v: number | null | undefined; d?: number }) => <span style={{ color: changeColor(v) }}>{pct(v, d, false)}</span>;
@@ -91,7 +91,19 @@ export function ExtendedBlock({ ext }: { ext: Extended | null | undefined }) {
 
 // ---------- Welt ----------
 
-export function WorldPanel({
+export function WorldPanel(props: Parameters<typeof WorldPanelInner>[0]) {
+  if (!props.sel) return <WorldPanelInner {...props} />;
+  return (
+    <>
+      <button className="closebtn" onClick={() => props.onSel(null)}>
+        ← Weltlage
+      </button>
+      <WorldPanelInner {...props} />
+    </>
+  );
+}
+
+function WorldPanelInner({
   world,
   heat,
   sel,
@@ -101,11 +113,23 @@ export function WorldPanel({
   predictions,
   events,
   onMap,
+  overview,
+  launches,
+  mood,
+  tab,
+  setTab,
+  onMood,
 }: {
   world: World | undefined;
   heat: HotspotHeat[] | undefined;
   predictions: Prediction[] | undefined;
   events: Events | undefined;
+  overview: CountryOverview | undefined;
+  launches: Launches | undefined;
+  mood: Sentiment | undefined;
+  tab: string;
+  setTab: (t: string) => void;
+  onMood: () => void;
   onMap: () => void;
   sel: GlobeSel;
   onSel: (s: GlobeSel) => void;
@@ -189,43 +213,50 @@ export function WorldPanel({
     const h = world.hotspots.find((x) => x.id === sel.id)!;
     return <HotspotPanel key={h.id} h={h} predictions={predictions?.filter((p) => p.hotspots.includes(h.id))} />;
   }
+  if (sel?.type === "country")
+    return <CountryPanel key={sel.id} iso3={sel.id} world={world} overview={overview} events={events} launches={launches} onSel={onSel} />;
+  if (sel?.type === "launch") {
+    const site = launches?.sites.find((x) => x.id === sel.id);
+    if (site) return <LaunchPanel site={site} />;
+  }
+  if (sel?.type === "mood") return <MoodPanel data={mood} onOpen={onMood} />;
 
-  const ranked = world.markets.filter((m) => ok(m.quote)).sort((a, b) => (ok(b.quote) ? b.quote.changePct ?? 0 : 0) - (ok(a.quote) ? a.quote.changePct ?? 0 : 0));
+  const TABS_W: [string, string][] = [
+    ["lage", "Lage"],
+    ["maerkte", "Märkte"],
+    ["notenbanken", "Notenbanken"],
+    ["ereignisse", "Ereignisse"],
+    ["raumfahrt", "Raumfahrt"],
+  ];
+  const tabs = (
+    <div className="tabs">
+      {TABS_W.map(([k, n]) => (
+        <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>
+          {n}
+        </button>
+      ))}
+    </div>
+  );
+  if (tab === "maerkte") return <>{tabs}<MarketsTab world={world} mood={mood} onSel={onSel} /></>;
+  if (tab === "notenbanken") return <>{tabs}<BanksTab world={world} onSel={onSel} /></>;
+  if (tab === "ereignisse") return <>{tabs}{events ? <EventsTab data={events} onSel={(id) => onSel({ type: "event", id })} /> : <Loading />}</>;
+  if (tab === "raumfahrt") return <>{tabs}{launches ? <SpaceTab data={launches} onSel={(id) => onSel({ type: "launch", id })} /> : <Loading />}</>;
+
   const heatMap = new Map(heat?.map((h) => [h.id, h]) ?? []);
   return (
     <>
+      {tabs}
       <h2>Weltlage</h2>
+      <LageSummary world={world} events={events} overview={overview} launches={launches} mood={mood} onMood={() => onSel({ type: "mood", id: "mood" })} />
       <p className="dim small">
-        Säulen: Märkte (Höhe = Tagesbewegung). Goldene Ringe: Notenbanken (Größe = Zins). Glut: geopolitische Brennpunkte (Nachrichtenlage 24 h), violetter Ring:
-        Prognosemärkte dazu. Tore: Engpässe des Seehandels. Flache Ringe: Erdbeben und Naturkatastrophen, pulsierend bei starken Ereignissen.
+        Rot schraffiert: Länder mit aktivem Konflikt (dichter = mehr Tote). Grün: Länder mit positiven Meldungen der letzten 14 Tage. Säulen: Märkte, goldene Ringe:
+        Notenbanken, Glut: Brennpunkte, Tore: Engpässe, flache Ringe: Erdbeben und Katastrophen, Raketen: Startbasen. Der Mond ist das Stimmungsbarometer. Ein Klick auf
+        ein Land zeigt Kennzahlen und Nachrichten.
       </p>
       <div className="actions">
         <button onClick={onMap}>Lagekarte mit Konflikten öffnen</button>
       </div>
-      <h3>Märkte heute</h3>
-      <table className="click">
-        <tbody>
-          {ranked.map((m) => (
-            <tr key={m.id} onClick={() => onSel({ type: "market", id: m.id })}>
-              <td>{m.name}</td>
-              <td className="dim">{m.etf}</td>
-              <td><Chg v={ok(m.quote) ? m.quote.changePct : null} /></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <h3>Notenbanken</h3>
-      <table className="click">
-        <tbody>
-          {world.banks.map((b) => (
-            <tr key={b.id} onClick={() => onSel({ type: "bank", id: b.id })}>
-              <td>{b.short}</td>
-              <td>{ok(b.data) ? `${fmt(b.data.rate, 2)} %` : "–"}</td>
-              <td className="dim small">{ok(b.data) ? (b.data.stale ? "veraltet" : dateDe(b.data.asOf)) : ""}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {overview && <ConflictList overview={overview} onSel={(iso3) => onSel({ type: "country", id: iso3 })} />}
       {(["brennpunkt", "engpass"] as const).map((kind) => (
         <div key={kind}>
           <h3>{kind === "brennpunkt" ? "Brennpunkte" : "Engpässe"}</h3>
@@ -250,7 +281,530 @@ export function WorldPanel({
           <Predictions items={predictions.slice(0, 8)} />
         </>
       )}
-      {events && <EventList data={events} onSel={(id) => onSel({ type: "event", id })} />}
+    </>
+  );
+}
+
+// ---------- Themen der Seitenleiste ----------
+
+const ago = (iso: string | null) => {
+  if (!iso) return "";
+  const m = (Date.now() - Date.parse(iso)) / 60_000;
+  if (m < 60) return `vor ${Math.max(1, Math.round(m))} Min.`;
+  if (m < 48 * 60) return `vor ${Math.round(m / 60)} Std.`;
+  return `vor ${Math.round(m / 1440)} Tagen`;
+};
+const list = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} und ${xs.at(-1)}`);
+const dtDe = (iso: string) => new Date(iso).toLocaleString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+
+function NewsList({ items, note }: { items: NewsItem[] | undefined; note?: string | null }) {
+  if (!items) return <p className="dim">{note ?? "lädt …"}</p>;
+  if (!items.length) return <p className="dim">Keine Meldungen gefunden.</p>;
+  return (
+    <ul className="news">
+      {items.map((a) => (
+        <li key={a.url}>
+          <a href={a.url} target="_blank" rel="noreferrer">
+            {a.title}
+          </a>
+          <small className="dim">
+            {a.source} · {ago(a.time)}
+          </small>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function TopicNewsBlock({ topic }: { topic: string }) {
+  const { data, error } = useApi<TopicNews>(`news/${topic}`, 15 * 60_000);
+  return (
+    <>
+      <h3>Aktuelle Nachrichten</h3>
+      <NewsList items={data?.items.slice(0, 12)} note={error} />
+      <p className="dim small">Quelle: Google News, deutschsprachige Ausgabe.</p>
+    </>
+  );
+}
+
+const marketChg = (m: World["markets"][number]) => (ok(m.quote) ? m.quote.changePct : null);
+
+function LageSummary({
+  world,
+  events,
+  overview,
+  launches,
+  mood,
+  onMood,
+}: {
+  world: World;
+  events?: Events;
+  overview?: CountryOverview;
+  launches?: Launches;
+  mood?: Sentiment;
+  onMood: () => void;
+}) {
+  const ms = world.markets.filter((m) => marketChg(m) != null);
+  const up = ms.filter((m) => marketChg(m)! > 0).length;
+  const wars = overview ? Object.entries(overview.conflict).filter(([, c]) => c.tier === 1).length : 0;
+  const nameOf = (iso3: string) => overview?.list.find((c) => c.iso3 === iso3)?.name ?? iso3;
+  const pos = overview ? Object.entries(overview.positive).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k]) => nameOf(k)) : [];
+  const red = events?.events.filter((e) => e.alert === "red") ?? [];
+  const next = launches?.sites.flatMap((s) => s.launches.map((l) => ({ l, s }))).filter((x) => Date.parse(x.l.net) > Date.now()).sort((a, b) => a.l.net.localeCompare(b.l.net))[0];
+  return (
+    <div className="summary">
+      <p>
+        {ms.length > 0 && <>{up} von {ms.length} Märkten im Plus. </>}
+        {mood?.score != null && (
+          <>
+            <a className="plain" onClick={onMood} style={{ cursor: "pointer", color: moodColor(mood.score) }}>
+              Stimmung {mood.score} ({mood.label})
+            </a>
+            .{" "}
+          </>
+        )}
+        {overview && <>In {wars} Ländern herrscht Krieg, {Object.keys(overview.conflict).length - wars} weitere haben kleinere Konflikte oder sind Nebenschauplatz. </>}
+        {pos.length > 0 && <>Gute Nachrichten vor allem aus {list(pos)}. </>}
+        {red.length > 0 && <>Warnstufe Rot: {list(red.map((e) => e.name))}. </>}
+        {next && (
+          <>
+            Nächster Raketenstart: {next.l.name}, {whenLaunch(next.l)}.
+          </>
+        )}
+      </p>
+    </div>
+  );
+}
+
+function ConflictList({ overview, onSel }: { overview: CountryOverview; onSel: (iso3: string) => void }) {
+  const nameOf = (iso3: string) => overview.list.find((c) => c.iso3 === iso3)?.name ?? iso3;
+  const wars = Object.entries(overview.conflict).sort((a, b) => a[1].tier - b[1].tier || nameOf(a[0]).localeCompare(nameOf(b[0])));
+  const pos = Object.entries(overview.positive).sort((a, b) => b[1] - a[1]);
+  const TIER = ["", "Krieg", "Konflikt", "Nebenschauplatz/klein"];
+  return (
+    <>
+      <h3>Konfliktländer</h3>
+      <div className="chips">
+        {wars.map(([k, c]) => (
+          <button key={k} className="chip" style={{ borderColor: `rgba(${CONFLICT_RGB},${[0, 0.9, 0.6, 0.35][c.tier]})` }} title={`${TIER[c.tier]}: ${c.names.join("; ")}`} onClick={() => onSel(k)}>
+            {nameOf(k)}
+          </button>
+        ))}
+      </div>
+      {pos.length > 0 && (
+        <>
+          <h3>Positive Meldungen</h3>
+          <div className="chips">
+            {pos.map(([k, n]) => (
+              <button key={k} className="chip" style={{ borderColor: `rgba(${POSITIVE_RGB},0.8)` }} onClick={() => onSel(k)}>
+                {nameOf(k)} <span className="dim">{n}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      <p className="dim small">
+        Konflikte: Wikipedia-Liste laufender bewaffneter Konflikte (Kriege ab 10.000, Konflikte ab 1.000 und ab 100 Toten im Jahr). Positiv: Feeds von Good News Network,
+        Positive News, Reasons to be Cheerful und Good Good Good, Länder aus Titel und Anriss erkannt.
+        {overview.errors.length > 0 && <span className="warn"> {overview.errors.join(" · ")}</span>}
+      </p>
+    </>
+  );
+}
+
+function MarketsTab({ world, mood, onSel }: { world: World; mood?: Sentiment; onSel: (s: GlobeSel) => void }) {
+  const ranked = world.markets.filter((m) => marketChg(m) != null).sort((a, b) => marketChg(b)! - marketChg(a)!);
+  const up = ranked.filter((m) => marketChg(m)! > 0).length;
+  const avg = ranked.length ? ranked.reduce((a, m) => a + marketChg(m)!, 0) / ranked.length : null;
+  const regions = [...new Set(ranked.map((m) => m.region))].map((r) => {
+    const xs = ranked.filter((m) => m.region === r);
+    return { r, v: xs.reduce((a, m) => a + marketChg(m)!, 0) / xs.length };
+  });
+  const best = ranked[0];
+  const worst = ranked.at(-1);
+  return (
+    <>
+      <h2>Märkte</h2>
+      {best && worst && (
+        <div className="summary">
+          <p>
+            {up} von {ranked.length} Ländermärkten im Plus, im Schnitt <Chg v={avg} />. Vorne {best.name} (<Chg v={marketChg(best)} />), hinten {worst.name} (
+            <Chg v={marketChg(worst)} />).{" "}
+            {regions.map((x, i) => (
+              <span key={x.r}>
+                {i ? ", " : "Regionen: "}
+                {x.r} <Chg v={x.v} />
+              </span>
+            ))}
+            .{mood?.score != null && <> Stimmung {mood.score} ({mood.label}).</>}
+          </p>
+        </div>
+      )}
+      <table className="click">
+        <tbody>
+          {ranked.map((m) => (
+            <tr key={m.id} onClick={() => onSel({ type: "market", id: m.id })}>
+              <td>{m.name}</td>
+              <td className="dim">{m.etf}</td>
+              <td><Chg v={marketChg(m)} /></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="dim small">Tagesveränderung der US-gelisteten Länder-ETFs in USD.</p>
+      <TopicNewsBlock topic="maerkte" />
+    </>
+  );
+}
+
+function BanksTab({ world, onSel }: { world: World; onSel: (s: GlobeSel) => void }) {
+  const bs = world.banks.filter((b) => ok(b.data)).map((b) => ({ b, d: ok(b.data) ? b.data : null! }));
+  const byRate = [...bs].sort((a, b) => b.d.rate - a.d.rate);
+  const changes = bs.filter((x) => x.d.lastChange?.date).sort((a, b) => b.d.lastChange!.date!.localeCompare(a.d.lastChange!.date!));
+  const recent = changes.filter((x) => (Date.now() - Date.parse(x.d.lastChange!.date!)) / 86400_000 < 90);
+  const r = (id: string) => bs.find((x) => x.b.id === id);
+  const verb = (x: (typeof bs)[number]) => (x.d.lastChange!.to < x.d.lastChange!.from ? "gesenkt" : "erhöht");
+  return (
+    <>
+      <h2>Notenbanken</h2>
+      {bs.length > 0 && (
+        <div className="summary">
+          <p>
+            {r("fed") && <>Fed {fmt(r("fed")!.d.rate, 2)} %, </>}
+            {r("ezb") && <>EZB {fmt(r("ezb")!.d.rate, 2)} %. </>}
+            Am höchsten liegt der Leitzins bei der {byRate[0].b.short} ({fmt(byRate[0].d.rate, 2)} %), am niedrigsten bei der {byRate.at(-1)!.b.short} (
+            {fmt(byRate.at(-1)!.d.rate, 2)} %).{" "}
+            {recent.length ? (
+              <>
+                In den letzten drei Monaten haben {recent.length} Notenbanken ihren Zins geändert:{" "}
+                {list(recent.map((x) => `${x.b.short} ${verb(x)} am ${dateDe(x.d.lastChange!.date)} um ${Math.abs(Math.round((x.d.lastChange!.to - x.d.lastChange!.from) * 100))} Bp.`))}
+              </>
+            ) : (
+              <>In den letzten drei Monaten hat keine der zehn Notenbanken ihren Zins geändert.</>
+            )}
+          </p>
+        </div>
+      )}
+      <table className="click">
+        <tbody>
+          {world.banks.map((b) => (
+            <tr key={b.id} onClick={() => onSel({ type: "bank", id: b.id })}>
+              <td>{b.short}</td>
+              <td>{ok(b.data) ? `${fmt(b.data.rate, 2)} %` : "–"}</td>
+              <td className="dim small">
+                {ok(b.data) && b.data.lastChange ? `zuletzt ${signed((b.data.lastChange.to - b.data.lastChange.from) * 100, 0)} Bp. am ${dateDe(b.data.lastChange.date)}` : ""}
+                {ok(b.data) && b.data.stale ? " · veraltet" : ""}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <TopicNewsBlock topic="notenbanken" />
+    </>
+  );
+}
+
+function EventsTab({ data, onSel }: { data: Events; onSel: (id: string) => void }) {
+  const quakes = data.events.filter((e) => e.kind === "beben");
+  const other = data.events.filter((e) => e.kind !== "beben");
+  const top = [...quakes].sort((a, b) => (b.mag ?? 0) - (a.mag ?? 0))[0];
+  const kinds = Object.entries(EVENT_KIND)
+    .filter(([k]) => k !== "beben")
+    .map(([k, v]) => [v.name, other.filter((e) => e.kind === k).length] as const)
+    .filter(([, n]) => n > 0);
+  const severe = other.filter((e) => e.alert === "red" || e.alert === "orange");
+  return (
+    <>
+      <h2>Erdbeben und Katastrophen</h2>
+      <div className="summary">
+        <p>
+          {quakes.length} Erdbeben ab Magnitude 4,5 in sieben Tagen{top && <>, das stärkste mit M {fmt(top.mag, 1)}: {top.name.replace(/^M [\d.]+ · /, "")}</>}.{" "}
+          {other.length} laufende Katastrophen ({kinds.map(([n, c]) => `${c} × ${n}`).join(", ")})
+          {severe.length ? <>, davon mit Warnstufe Orange oder Rot: {list(severe.map((e) => e.name))}.</> : <>, keine mit Warnstufe Orange oder Rot.</>}
+        </p>
+      </div>
+      <EventList data={data} onSel={onSel} />
+      <TopicNewsBlock topic="ereignisse" />
+    </>
+  );
+}
+
+function SpaceTab({ data, onSel }: { data: Launches; onSel: (id: string) => void }) {
+  const all = data.sites
+    .flatMap((s) => s.launches.map((l) => ({ l, s })))
+    .sort((a, b) => a.l.net.localeCompare(b.l.net));
+  const future = all.filter((x) => Date.parse(x.l.net) > Date.now() - 3600_000);
+  const week = future.filter((x) => Date.parse(x.l.net) < Date.now() + 7 * 86400_000);
+  const busiest = [...data.sites].sort((a, b) => b.launches.length - a.launches.length)[0];
+  const providers = new Map<string, number>();
+  future.forEach((x) => x.l.provider && providers.set(x.l.provider, (providers.get(x.l.provider) ?? 0) + 1));
+  const topProv = [...providers.entries()].sort((a, b) => b[1] - a[1])[0];
+  return (
+    <>
+      <h2>Raketenstarts</h2>
+      <div className="summary">
+        <p>
+          {future.length} Starts angekündigt{future.length > 0 && <> bis {dateDe(future.at(-1)!.l.net)}</>}, davon {week.length} in den nächsten sieben Tagen.{" "}
+          {busiest && <>Am meisten los ist in {busiest.name.split(",")[0]} ({busiest.launches.length}). </>}
+          {topProv && <>Häufigster Betreiber: {topProv[0]} ({topProv[1]}).</>}
+        </p>
+      </div>
+      <table className="click">
+        <tbody>
+          {future.slice(0, 25).map(({ l, s }) => (
+            <tr key={l.id} onClick={() => onSel(s.id)}>
+              <td>
+                {l.name}
+                <br />
+                <small className="dim">{s.name.split(",")[0]}</small>
+              </td>
+              <td className="dim small" style={{ whiteSpace: "nowrap" }}>
+                {whenLaunch(l)}
+                <br />
+                {STATUS_DE[l.status] ?? l.status}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="dim small">Quelle: Launch Library 2 von The Space Devs, alle 30 Minuten. Zeiten in deiner Zeitzone; steht nur Tag oder Monat, ist der Termin noch nicht fest.</p>
+      <TopicNewsBlock topic="raumfahrt" />
+    </>
+  );
+}
+
+/** Startzeit so genau, wie sie feststeht: Monat, Tag oder Uhrzeit. */
+function whenLaunch(l: { net: string; precision: string | null }) {
+  const d = new Date(l.net);
+  const p = l.precision ?? "Minute";
+  if (["Month", "Quarter", "Year", "Fiscal Year", "Half"].some((x) => p.startsWith(x))) return d.toLocaleDateString("de-DE", { month: "long", year: "numeric" });
+  if (p === "Day" || p.startsWith("Week")) return d.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
+  return `${p === "Hour" ? "ca. " : ""}${dtDe(l.net)}`;
+}
+
+const STATUS_DE: Record<string, string> = { Go: "freigegeben", TBD: "geplant", TBC: "zu bestätigen", Hold: "angehalten", "In Flight": "im Flug", Success: "erfolgreich", Failure: "gescheitert", "Partial Failure": "teilweise gescheitert" };
+
+function LaunchPanel({ site }: { site: LaunchSite }) {
+  return (
+    <>
+      <h2>{site.name.split(",")[0]}</h2>
+      <p className="dim">{site.name}</p>
+      <p>{site.launches.length} angekündigte Starts</p>
+      {site.launches.map((l) => (
+        <div key={l.id} className="part">
+          <div className="row">
+            <a className="plain" href={l.url} target="_blank" rel="noreferrer">
+              <b>{l.name}</b>
+            </a>
+          </div>
+          <small className="dim">
+            {whenLaunch(l)} · {STATUS_DE[l.status] ?? l.statusName}
+          </small>
+          <br />
+          <small>
+            {[l.rocket, l.provider, l.missionType, l.orbit].filter(Boolean).join(" · ")}
+          </small>
+          {l.mission && <p className="dim small">{l.mission.slice(0, 220)}{l.mission.length > 220 ? " …" : ""}</p>}
+        </div>
+      ))}
+      <p className="dim small">Quelle: Launch Library 2 (The Space Devs). Link führt zu Space Launch Schedule.</p>
+    </>
+  );
+}
+
+function MoodPanel({ data, onOpen }: { data: Sentiment | undefined; onOpen: () => void }) {
+  if (!data) return <Loading />;
+  return (
+    <>
+      <h2>Stimmungsbarometer</h2>
+      <div className="hero" style={{ color: moodColor(data.score) }}>
+        {data.score ?? "–"} <small>{data.label}</small>
+      </div>
+      <p className="dim small">Eigener Angst-und-Gier-Index, 0 = extreme Angst, 100 = extreme Gier. Stand {dateDe(data.asOf)}.</p>
+      {data.parts.map((p) => (
+        <div key={p.id} className="part">
+          <div className="row">
+            <span>{p.name}</span>
+            <b style={{ color: moodColor(p.score) }}>{p.score}</b>
+          </div>
+          <div className="bar">
+            <i style={{ width: `${p.score}%`, background: moodColor(p.score) }} />
+          </div>
+          <small className="dim">{p.value}</small>
+        </div>
+      ))}
+      <div className="actions">
+        <button onClick={onOpen}>Stimmung in 3D aufklappen</button>
+      </div>
+    </>
+  );
+}
+
+// ---------- Land ----------
+
+const MARKET_ISO2: Record<string, string> = { us: "US", "us-tech": "US", uk: "GB" };
+const EURO = ["AT", "BE", "CY", "DE", "EE", "ES", "FI", "FR", "GR", "HR", "IE", "IT", "LT", "LU", "LV", "MT", "NL", "PT", "SI", "SK"];
+const BANK_ISO2: Record<string, string[]> = { fed: ["US"], ezb: EURO, boe: ["GB"], boj: ["JP"], boc: ["CA"], rba: ["AU"], rbi: ["IN"], bcb: ["BR"], snb: ["CH"], pboc: ["CN"] };
+const REGION_DE: Record<string, string> = {
+  "East Asia & Pacific": "Ostasien und Pazifik",
+  "Europe & Central Asia": "Europa und Zentralasien",
+  "Latin America & Caribbean": "Lateinamerika und Karibik",
+  "Middle East & North Africa": "Naher Osten und Nordafrika",
+  "Middle East, North Africa, Afghanistan & Pakistan": "Naher Osten, Nordafrika, Afghanistan und Pakistan",
+  "North America": "Nordamerika",
+  "South Asia": "Südasien",
+  "Sub-Saharan Africa": "Afrika südlich der Sahara",
+};
+const INCOME_DE: Record<string, string> = { "High income": "hohes Einkommen", "Upper middle income": "oberes mittleres Einkommen", "Lower middle income": "unteres mittleres Einkommen", "Low income": "niedriges Einkommen" };
+
+function statValue(s: CountryDetail["stats"][number]) {
+  if (s.value == null) return "–";
+  if (s.id === "SP.POP.TOTL") return s.value >= 1e6 ? `${fmt(s.value / 1e6, 1)} Mio.` : fmt(s.value, 0);
+  if (s.unit === "USD") return s.value >= 1e9 ? `${big(s.value)} $` : `${fmt(s.value, 0)} $`;
+  if (s.unit === "km²") return `${fmt(s.value, 0)} km²`;
+  if (s.unit === "Jahre") return `${fmt(s.value, 1)} Jahre`;
+  return `${fmt(s.value, 1)} ${s.unit}`;
+}
+
+function CountryPanel({
+  iso3,
+  world,
+  overview,
+  events,
+  launches,
+  onSel,
+}: {
+  iso3: string;
+  world: World;
+  overview?: CountryOverview;
+  events?: Events;
+  launches?: Launches;
+  onSel: (s: GlobeSel) => void;
+}) {
+  const { data, error } = useApi<CountryDetail>(`country/${iso3}`);
+  const meta = overview?.list.find((c) => c.iso3 === iso3);
+  const iso2 = meta?.iso2 ?? data?.iso2 ?? "";
+  const conf = overview?.conflict[iso3];
+  const markets = world.markets.filter((m) => (MARKET_ISO2[m.id] ?? m.id.toUpperCase()) === iso2);
+  const banks = world.banks.filter((b) => BANK_ISO2[b.id]?.includes(iso2));
+  const evs = events?.events.filter((e) => inCountry(meta?.num, e.lat, e.lon)) ?? [];
+  const sites = launches?.sites.filter((s) => s.country === iso3) ?? [];
+  return (
+    <>
+      <h2>{meta?.name ?? data?.name ?? iso3}</h2>
+      <p className="dim">
+        {[data?.capital && `Hauptstadt ${data.capital}`, data?.region && (REGION_DE[data.region] ?? data.region), data?.income && (INCOME_DE[data.income] ?? data.income)].filter(Boolean).join(" · ")}
+      </p>
+      <div className="chips">
+        {conf && (
+          <span className="chip" style={{ borderColor: `rgba(${CONFLICT_RGB},0.9)` }}>
+            {conf.tier === 1 ? "Krieg" : conf.tier === 2 ? "bewaffneter Konflikt" : "Konfliktgebiet"}
+          </span>
+        )}
+        {overview?.positive[iso3] ? (
+          <span className="chip" style={{ borderColor: `rgba(${POSITIVE_RGB},0.8)` }}>
+            {overview.positive[iso3]} positive Meldung{overview.positive[iso3] > 1 ? "en" : ""}
+          </span>
+        ) : null}
+      </div>
+      {!data ? (
+        <Loading error={error} />
+      ) : (
+        <>
+          <table>
+            <tbody>
+              {data.stats.map((s) => (
+                <tr key={s.id}>
+                  <td>{s.name}</td>
+                  <td>{statValue(s)}</td>
+                  <td className="dim small">{s.year ?? ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="dim small">Quelle: Weltbank, jeweils jüngster Jahreswert.</p>
+        </>
+      )}
+      {(markets.length > 0 || banks.length > 0) && (
+        <>
+          <h3>Markt und Notenbank</h3>
+          <table className="click">
+            <tbody>
+              {markets.map((m) => (
+                <tr key={m.id} onClick={() => onSel({ type: "market", id: m.id })}>
+                  <td>{m.index}</td>
+                  <td className="dim">{m.etf}</td>
+                  <td><Chg v={marketChg(m)} /></td>
+                </tr>
+              ))}
+              {banks.map((b) => (
+                <tr key={b.id} onClick={() => onSel({ type: "bank", id: b.id })}>
+                  <td>{b.name}</td>
+                  <td className="dim">{b.short}</td>
+                  <td>{ok(b.data) ? `${fmt(b.data.rate, 2)} %` : "–"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+      {data && data.conflicts.length > 0 && (
+        <>
+          <h3>Konflikte</h3>
+          <ul className="news">
+            {data.conflicts.map((c) => (
+              <li key={c.name}>
+                <span>{c.name}</span>
+                <small className="dim">
+                  {c.tier === 1 ? "Krieg, über 10.000 Tote im Jahr" : c.tier === 2 ? "1.000 bis 9.999 Tote im Jahr" : "100 bis 999 Tote im Jahr"}
+                  {c.countries[0] !== iso3 && " · hier Nebenschauplatz"}
+                </small>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {evs.length > 0 && (
+        <>
+          <h3>Ereignisse</h3>
+          <table className="click">
+            <tbody>
+              {evs.slice(0, 8).map((e) => (
+                <tr key={e.id} onClick={() => onSel({ type: "event", id: e.id })}>
+                  <td>
+                    <span style={{ color: EVENT_KIND[e.kind].color }}>●</span> {e.name}
+                  </td>
+                  <td className="dim">{e.mag != null ? `M ${fmt(e.mag, 1)}` : e.alert ? ALERT_DE[e.alert] : ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+      {sites.length > 0 && (
+        <>
+          <h3>Startbasen</h3>
+          <table className="click">
+            <tbody>
+              {sites.map((s) => (
+                <tr key={s.id} onClick={() => onSel({ type: "launch", id: s.id })}>
+                  <td>{s.name.split(",")[0]}</td>
+                  <td className="dim">{s.launches.length} Starts</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+      {data && data.positive.length > 0 && (
+        <>
+          <h3>Positive Meldungen</h3>
+          <NewsList items={data.positive.slice(0, 6)} />
+        </>
+      )}
+      <h3>Nachrichten</h3>
+      <NewsList items={data?.news} note={data?.newsError ?? error} />
+      {data && <p className="dim small">Quelle: Google News, deutschsprachige Ausgabe, letzte drei Tage.</p>}
     </>
   );
 }

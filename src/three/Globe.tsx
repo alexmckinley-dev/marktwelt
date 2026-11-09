@@ -1,19 +1,28 @@
-import { geoEquirectangular, geoPath } from "d3-geo";
-import { useFrame } from "@react-three/fiber";
-import { useLayoutEffect, useMemo, useRef } from "react";
+import { geoContains, geoEquirectangular, geoPath } from "d3-geo";
+import { useFrame, type ThreeEvent } from "@react-three/fiber";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { feature, mesh } from "topojson-client";
 import type { GeometryCollection, Topology } from "topojson-specification";
 import countries from "world-atlas/countries-110m.json";
 import land from "world-atlas/land-110m.json";
-import { ok, type Bank, type GeoEvent, type HotspotHeat, type MarketDetail, type Prediction, type World } from "../api";
-import { changeColor, fmt, mix, pct } from "../format";
+import { ok, type Bank, type CountryOverview, type GeoEvent, type HotspotHeat, type LaunchSite, type MarketDetail, type Prediction, type Sentiment, type World } from "../api";
+import { changeColor, fmt, mix, moodColor, pct } from "../format";
 import { Burst, Label, Pulse, latLon, upTo, useHover } from "./common";
 
 export const R = 2;
 
-export type Layers = { markets: boolean; banks: boolean; hotspots: boolean; chokepoints: boolean; quakes: boolean; disasters: boolean };
-export type GlobeSel = { type: "market" | "bank" | "hotspot" | "event"; id: string } | null;
+export type Layers = {
+  markets: boolean;
+  banks: boolean;
+  hotspots: boolean;
+  chokepoints: boolean;
+  events: boolean;
+  countries: boolean;
+  launches: boolean;
+  mood: boolean;
+};
+export type GlobeSel = { type: "market" | "bank" | "hotspot" | "event" | "country" | "launch" | "mood"; id: string; lat?: number; lon?: number } | null;
 
 export const EVENT_KIND: Record<GeoEvent["kind"], { name: string; color: string }> = {
   beben: { name: "Erdbeben", color: "#f5a742" },
@@ -131,6 +140,190 @@ function Earth() {
       </mesh>
       <LandDots />
       <Borders />
+    </group>
+  );
+}
+
+
+// ---------- Länderflächen: Konflikte, positive Meldungen, Auswahl ----------
+
+type CountryFeature = GeoJSON.Feature<GeoJSON.Geometry, { name: string }> & { id?: string };
+
+const COUNTRY_FEATURES: CountryFeature[] = (() => {
+  const topo = countries as unknown as Topology<{ countries: GeometryCollection }>;
+  return (feature(topo, topo.objects.countries) as unknown as GeoJSON.FeatureCollection<GeoJSON.Geometry, { name: string }>).features as CountryFeature[];
+})();
+
+export const countryFeature = (num: string | null | undefined) => (num ? COUNTRY_FEATURES.find((f) => f.id === num) : undefined);
+
+/** Punkt in einem Land? Für Ereignisse und Startbasen im Länderpanel. */
+export const inCountry = (num: string | null | undefined, lat: number, lon: number) => {
+  const f = countryFeature(num);
+  return f ? geoContains(f, [lon, lat]) : false;
+};
+
+export const CONFLICT_RGB = "255,77,90";
+export const POSITIVE_RGB = "46,230,140";
+const TW = 4096;
+const TH = 2048;
+const PW = 2048;
+const PH = 1024;
+
+/** Kennfarben je Land für die Auswahl mit der Maus (Index + 1 im Rot- und Grünkanal). */
+function usePickCanvas() {
+  return useMemo(() => {
+    const cv = document.createElement("canvas");
+    cv.width = PW;
+    cv.height = PH;
+    const ctx = cv.getContext("2d", { willReadFrequently: true })!;
+    const path = geoPath(geoEquirectangular().scale(PW / (2 * Math.PI)).translate([PW / 2, PH / 2]), ctx);
+    COUNTRY_FEATURES.forEach((f, i) => {
+      const k = i + 1;
+      ctx.fillStyle = `rgb(${k & 255},${(k >> 8) & 255},0)`;
+      ctx.beginPath();
+      path(f);
+      ctx.fill();
+    });
+    return ctx.getImageData(0, 0, PW, PH).data;
+  }, []);
+}
+
+function pick(img: Uint8ClampedArray, lat: number, lon: number): CountryFeature | undefined {
+  const x = Math.min(PW - 1, Math.floor(((lon + 180) / 360) * PW));
+  const y = Math.min(PH - 1, Math.floor(((90 - lat) / 180) * PH));
+  const o = (y * PW + x) * 4;
+  const k = img[o] + (img[o + 1] << 8);
+  const f = k ? COUNTRY_FEATURES[k - 1] : undefined;
+  if (f && geoContains(f, [lon, lat])) return f;
+  return COUNTRY_FEATURES.find((g) => geoContains(g, [lon, lat])) ?? (f && img[o + 3] > 200 ? f : undefined);
+}
+
+function toLatLon(p: THREE.Vector3) {
+  const r = p.length();
+  const lat = 90 - (Math.acos(p.y / r) * 180) / Math.PI;
+  const lon = (((Math.atan2(p.z, -p.x) * 180) / Math.PI + 360) % 360) - 180;
+  return { lat, lon };
+}
+
+function hatch(rgb: string, alpha: number) {
+  const c = document.createElement("canvas");
+  c.width = c.height = 14;
+  const x = c.getContext("2d")!;
+  x.fillStyle = `rgba(${rgb},${alpha * 0.35})`;
+  x.fillRect(0, 0, 14, 14);
+  x.strokeStyle = `rgba(${rgb},${alpha})`;
+  x.lineWidth = 2.2;
+  x.beginPath();
+  x.moveTo(-2, 16);
+  x.lineTo(16, -2);
+  x.moveTo(-2, 2);
+  x.lineTo(2, -2);
+  x.moveTo(12, 16);
+  x.lineTo(16, 12);
+  x.stroke();
+  return c;
+}
+
+function CountryLayer({
+  overview,
+  show,
+  selected,
+  onPick,
+}: {
+  overview: CountryOverview | undefined;
+  show: boolean;
+  selected: string | null;
+  onPick: (iso3: string | null, lat: number, lon: number) => void;
+}) {
+  const img = usePickCanvas();
+  const byNum = useMemo(() => new Map(overview?.list.filter((c) => c.num).map((c) => [c.num!, c]) ?? []), [overview]);
+  const [hover, setHover] = useState<{ name: string; p: THREE.Vector3; note: string } | null>(null);
+  const { canvas, tex } = useMemo(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = TW;
+    canvas.height = TH;
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    return { canvas, tex };
+  }, []);
+  useEffect(() => () => tex.dispose(), [tex]);
+
+  useEffect(() => {
+    const ctx = canvas.getContext("2d")!;
+    ctx.clearRect(0, 0, TW, TH);
+    const path = geoPath(geoEquirectangular().scale(TW / (2 * Math.PI)).translate([TW / 2, TH / 2]), ctx);
+    const patterns = [0.7, 0.5, 0.3].map((a) => ctx.createPattern(hatch(CONFLICT_RGB, a), "repeat")!);
+    for (const f of COUNTRY_FEATURES) {
+      const c = byNum.get(f.id ?? "");
+      const isSel = !!c && c.iso3 === selected;
+      const conf = c && show ? overview?.conflict[c.iso3] : undefined;
+      const pos = c && show ? overview?.positive[c.iso3] ?? 0 : 0;
+      if (!conf && !pos && !isSel) continue;
+      ctx.beginPath();
+      path(f);
+      if (pos) {
+        ctx.fillStyle = `rgba(${POSITIVE_RGB},${Math.min(0.3, 0.12 + pos * 0.04)})`;
+        ctx.fill();
+      }
+      if (conf) {
+        ctx.fillStyle = patterns[Math.min(3, conf.tier) - 1];
+        ctx.fill();
+      }
+      if (isSel) {
+        ctx.fillStyle = "rgba(43,212,224,0.32)";
+        ctx.fill();
+        ctx.strokeStyle = "rgba(120,240,255,0.95)";
+        ctx.lineWidth = 5;
+        ctx.stroke();
+      }
+    }
+    tex.needsUpdate = true;
+  }, [canvas, tex, overview, byNum, show, selected]);
+
+  const at = (e: ThreeEvent<PointerEvent | MouseEvent>) => {
+    const { lat, lon } = toLatLon(e.point);
+    const f = pick(img, lat, lon);
+    return { f, lat, lon, c: f ? byNum.get(f.id ?? "") : undefined };
+  };
+  return (
+    <group>
+      <mesh
+        onClick={(e) => {
+          e.stopPropagation();
+          if (e.delta > 5) return;
+          const { c, lat, lon } = at(e);
+          onPick(c?.iso3 ?? null, lat, lon);
+        }}
+        onPointerMove={(e) => {
+          e.stopPropagation();
+          const { f, c } = at(e);
+          const name = c?.name ?? f?.properties.name;
+          if (!name) return setHover(null);
+          if (hover?.name === name) return;
+          const conf = c ? overview?.conflict[c.iso3] : undefined;
+          const pos = c ? overview?.positive[c.iso3] : undefined;
+          const note = [conf ? (conf.tier === 1 ? "Krieg" : conf.tier === 2 ? "bewaffneter Konflikt" : "Konfliktgebiet") : "", pos ? `${pos} positive Meldung${pos > 1 ? "en" : ""}` : ""]
+            .filter(Boolean)
+            .join(" · ");
+          setHover({ name, p: e.point.clone().multiplyScalar(1.02), note });
+        }}
+        onPointerOut={() => setHover(null)}
+      >
+        <sphereGeometry args={[R * 0.9995, 128, 96]} />
+        <meshBasicMaterial map={tex} transparent depthWrite={false} toneMapped={false} />
+      </mesh>
+      {hover && (
+        <Label position={hover.p} className="small">
+          <b>{hover.name}</b>
+          {hover.note && (
+            <>
+              <br />
+              <small>{hover.note}</small>
+            </>
+          )}
+        </Label>
+      )}
     </group>
   );
 }
@@ -386,6 +579,116 @@ function EventMarker({ ev, selected, onClick }: { ev: GeoEvent; selected: boolea
   );
 }
 
+
+/** Startbasis: schlanke Rakete auf der Oberfläche, Höhe nach Zahl der angekündigten Starts. */
+function LaunchMarker({ site, selected, onClick }: { site: LaunchSite; selected: boolean; onClick: () => void }) {
+  const [hover, bind] = useHover();
+  const p = latLon(site.lat, site.lon, R);
+  const q = upTo(p);
+  const next = site.launches.find((l) => Date.parse(l.net) > Date.now() - 3600_000);
+  const soon = next ? Date.parse(next.net) - Date.now() < 2 * 86400_000 : false;
+  const h = 0.07 + Math.min(site.launches.length, 20) * 0.006;
+  const color = "#d7c8ff";
+  return (
+    <group position={p} quaternion={q}>
+      <group
+        {...bind}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClick();
+        }}
+      >
+        <mesh position={[0, h / 2, 0]}>
+          <cylinderGeometry args={[0.009, 0.012, h, 10]} />
+          <meshStandardMaterial color={color} emissive={color} emissiveIntensity={hover || selected ? 2.6 : 1.2} toneMapped={false} />
+        </mesh>
+        <mesh position={[0, h + 0.018, 0]}>
+          <coneGeometry args={[0.012, 0.036, 10]} />
+          <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={1.4} toneMapped={false} />
+        </mesh>
+      </group>
+      {soon ? (
+        <Pulse speed={1.8} amp={0.4}>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.003, 0]}>
+            <ringGeometry args={[0.022, 0.034, 24]} />
+            <meshBasicMaterial color="#b58cff" transparent opacity={0.8} side={THREE.DoubleSide} toneMapped={false} />
+          </mesh>
+        </Pulse>
+      ) : (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.003, 0]}>
+          <ringGeometry args={[0.022, 0.03, 24]} />
+          <meshBasicMaterial color="#b58cff" transparent opacity={0.45} side={THREE.DoubleSide} />
+        </mesh>
+      )}
+      {(hover || selected) && (
+        <Label position={[0, h + 0.13, 0]}>
+          <b>{site.name.split(",")[0]}</b>
+          <br />
+          <small>
+            {site.launches.length} Start{site.launches.length > 1 ? "s" : ""} angekündigt
+            {next && ` · nächster ${new Date(next.net).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`}
+          </small>
+        </Label>
+      )}
+    </group>
+  );
+}
+
+/** Stimmungsbarometer als Mond: kreist schräg um die Erde, Farbe und Glut nach dem Indexwert. */
+function MoodMoon({ data, selected, onClick }: { data: Sentiment | undefined; selected: boolean; onClick: () => void }) {
+  const [hover, bind] = useHover();
+  const orbit = useRef<THREE.Group>(null);
+  const halo = useRef<THREE.Mesh>(null);
+  useFrame((st, dt) => {
+    if (orbit.current && !hover && !selected) orbit.current.rotation.y += dt * 0.07;
+    if (halo.current) halo.current.scale.setScalar(1 + Math.sin(st.clock.elapsedTime * 1.6) * 0.06);
+  });
+  const score = data?.score ?? null;
+  const c = moodColor(score);
+  const d = 3.35;
+  return (
+    <group rotation={[0.38, 0, 0.12]}>
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[d, 0.003, 6, 160]} />
+        <meshBasicMaterial color={c} transparent opacity={0.18} toneMapped={false} />
+      </mesh>
+      <group ref={orbit} rotation={[0, 0.9, 0]}>
+        <group position={[d, 0, 0]}>
+          <mesh
+            {...bind}
+            onClick={(e) => {
+              e.stopPropagation();
+              onClick();
+            }}
+          >
+            <sphereGeometry args={[0.16, 40, 40]} />
+            <meshStandardMaterial color={c} emissive={c} emissiveIntensity={hover || selected ? 1.6 : 0.75} roughness={0.55} toneMapped={false} />
+          </mesh>
+          <mesh ref={halo}>
+            <sphereGeometry args={[0.22, 32, 32]} />
+            <meshBasicMaterial color={c} transparent opacity={0.12} depthWrite={false} toneMapped={false} />
+          </mesh>
+          {score != null && (
+            <mesh rotation={[Math.PI / 2, 0, 0]}>
+              <torusGeometry args={[0.27, 0.007, 8, 64, (score / 100) * Math.PI * 2]} />
+              <meshBasicMaterial color={c} toneMapped={false} />
+            </mesh>
+          )}
+          <Label position={[0, 0.42, 0]} className="small">
+            <b style={{ color: c }}>{score ?? "…"}</b> Stimmung
+            {(hover || selected) && data && (
+              <>
+                <br />
+                <small>{data.label}</small>
+              </>
+            )}
+          </Label>
+        </group>
+      </group>
+    </group>
+  );
+}
+
 /** Explosionsansicht über einem Markt: vier Performance-Säulen fliegen aus dem Pfeiler. */
 function MarketBurst({ lat, lon, detail }: { lat: number; lon: number; detail: MarketDetail | undefined }) {
   const p = latLon(lat, lon, R);
@@ -430,9 +733,15 @@ export function Globe({
   marketDetail,
   predictions,
   events,
+  overview,
+  launches,
+  mood,
 }: {
   world: World | undefined;
   events: GeoEvent[] | undefined;
+  overview: CountryOverview | undefined;
+  launches: LaunchSite[] | undefined;
+  mood: Sentiment | undefined;
   heat: HotspotHeat[] | undefined;
   predictions: Prediction[] | undefined;
   layers: Layers;
@@ -446,6 +755,17 @@ export function Globe({
   return (
     <group onPointerMissed={() => onSelect(null)}>
       <Earth />
+      <CountryLayer
+        overview={overview}
+        show={layers.countries}
+        selected={sel?.type === "country" ? sel.id : null}
+        onPick={(iso3, lat, lon) => onSelect(iso3 ? { type: "country", id: iso3, lat, lon } : null)}
+      />
+      {layers.mood && <MoodMoon data={mood} selected={sel?.type === "mood"} onClick={() => onSelect({ type: "mood", id: "mood" })} />}
+      {layers.launches &&
+        launches?.map((s) => (
+          <LaunchMarker key={s.id} site={s} selected={sel?.type === "launch" && sel.id === s.id} onClick={() => onSelect({ type: "launch", id: s.id })} />
+        ))}
       {layers.markets &&
         world?.markets.map((m) => (
           <Pillar
@@ -478,7 +798,7 @@ export function Globe({
         return layers.hotspots ? <HotspotOrb key={h.id} {...common} /> : null;
       })}
       {events
-        ?.filter((ev) => (ev.kind === "beben" ? layers.quakes : layers.disasters))
+        ?.filter(() => layers.events)
         .map((ev) => (
           <EventMarker key={ev.id} ev={ev} selected={sel?.type === "event" && sel.id === ev.id} onClick={() => onSelect({ type: "event", id: ev.id })} />
         ))}

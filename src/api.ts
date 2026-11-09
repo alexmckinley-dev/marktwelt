@@ -195,3 +195,44 @@ export function useApi<T>(path: string | null, refreshMs = 0) {
   }, [path, refreshMs]);
   return state;
 }
+
+// ---------- Länder, Raumfahrt, Themen-Nachrichten ----------
+
+export type NewsItem = { title: string; url: string; source: string; time: string | null };
+export type CountryOverview = {
+  list: { iso3: string; iso2: string; num: string | null; name: string }[];
+  conflict: Record<string, { tier: number; names: string[] }>;
+  positive: Record<string, number>;
+  errors: string[];
+};
+export type CountryDetail = {
+  iso3: string;
+  iso2: string | null;
+  name: string;
+  capital: string | null;
+  region: string | null;
+  income: string | null;
+  stats: { id: string; name: string; unit: string; value: number | null; year: string | null }[];
+  conflicts: { name: string; tier: number; countries: string[] }[];
+  positive: NewsItem[];
+  news: NewsItem[];
+  newsError: string | null;
+};
+export type Launch = {
+  id: string;
+  name: string;
+  net: string;
+  precision: string | null;
+  status: string;
+  statusName: string;
+  provider: string | null;
+  rocket: string | null;
+  mission: string | null;
+  missionType: string | null;
+  orbit: string | null;
+  pad: string;
+  url: string;
+};
+export type LaunchSite = { id: string; name: string; country: string | null; lat: number; lon: number; launches: Launch[] };
+export type Launches = { sites: LaunchSite[]; total: number; asOf: string };
+export type TopicNews = { name: string; query: string; items: NewsItem[] };

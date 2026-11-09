@@ -12,6 +12,8 @@ import {
   type MarketDetail,
   type Prediction,
   type Events,
+  type CountryOverview,
+  type Launches,
   type Sector,
   type SectorDetail,
   type Sentiment,
@@ -20,7 +22,8 @@ import {
 } from "./api";
 import { CalendarScene } from "./three/Calendar";
 import { CameraRig, PanelOffset, Starfield, latLon } from "./three/common";
-import { Globe, R, type GlobeSel, type Layers } from "./three/Globe";
+import { geoCentroid } from "d3-geo";
+import { Globe, R, countryFeature, type GlobeSel, type Layers } from "./three/Globe";
 import { SectorsScene, sectorFocus } from "./three/Sectors";
 import { SentimentScene } from "./three/Sentiment";
 import { CandleChart, MetricCube } from "./three/StockChart";
@@ -76,9 +79,19 @@ export default function App() {
 
   // Auswahl je Szene
   const [globeSel, setGlobeSel] = useState<GlobeSel>(null);
-  const [layers, setLayers] = useState<Layers>({ markets: true, banks: true, hotspots: true, chokepoints: true, quakes: true, disasters: true });
+  const [layers, setLayers] = useState<Layers>({
+    markets: true,
+    banks: true,
+    hotspots: true,
+    chokepoints: true,
+    events: true,
+    countries: true,
+    launches: true,
+    mood: true,
+  });
   const [lageLayers, setLageLayers] = useState<string[]>(["conflicts", "earthquakes", "weather"]);
   const [lageView, setLageView] = useState("welt");
+  const [worldTab, setWorldTab] = useState("lage");
   const [moodOpen, setMoodOpen] = useState(false);
   const [moodSel, setMoodSel] = useState<string | null>(null);
   const [secExploded, setSecExploded] = useState(false);
@@ -92,7 +105,9 @@ export default function App() {
   const macro = useApi<Macro[]>("macro", 30 * 60_000);
   const evts = useApi<Events>(view.k === "welt" ? "events" : null, 15 * 60_000);
   const preds = useApi<Prediction[]>(view.k === "welt" ? "predictions" : null, 15 * 60_000);
-  const mood = useApi<Sentiment>(view.k === "stimmung" ? "sentiment" : null);
+  const mood = useApi<Sentiment>(view.k === "stimmung" || view.k === "welt" ? "sentiment" : null, 15 * 60_000);
+  const overview = useApi<CountryOverview>(view.k === "welt" ? "countries" : null, 30 * 60_000);
+  const launches = useApi<Launches>(view.k === "welt" ? "launches" : null, 30 * 60_000);
   const sectors = useApi<Sector[]>(view.k === "sektoren" ? "sectors" : null, 5 * 60_000);
   const sectorDetail = useApi<SectorDetail>(view.k === "sektoren" && secSel ? `sector/${secSel}` : null);
   const cal = useApi<Earning[]>(view.k === "termine" ? "calendar?days=10" : null);
@@ -107,7 +122,15 @@ export default function App() {
     if (view.k === "welt") {
       if (globeSel && world.data) {
         const item =
-          globeSel.type === "market"
+          globeSel.type === "mood"
+            ? null
+            : globeSel.type === "country"
+              ? globeSel.lat != null && globeSel.lon != null
+                ? { lat: globeSel.lat, lon: globeSel.lon }
+                : centroidOf(overview.data?.list.find((c) => c.iso3 === globeSel.id)?.num)
+              : globeSel.type === "launch"
+                ? launches.data?.sites.find((x) => x.id === globeSel.id)
+                : globeSel.type === "market"
             ? world.data.markets.find((m) => m.id === globeSel.id)
             : globeSel.type === "bank"
               ? world.data.banks.find((b) => b.id === globeSel.id)
@@ -130,7 +153,7 @@ export default function App() {
     if (view.k === "lage") return { pos: V(0, 1.4, 6.6), target: V(0, 0, 0), key: "l" };
     if (view.k === "termine") return { pos: V(7.5, 2.5, 7.5), target: V(0, 0, 0), key: "t" };
     return cubeOpen ? { pos: V(4.6, 1.2, 7.5), target: V(4.6, 0.6, 0), key: "a-open" } : { pos: V(0.9, 1.4, 11.5), target: V(0.9, 0.2, 0), key: `a-${view.k}` };
-  }, [view, globeSel, world.data, evts.data, moodOpen, secExploded, secSel, sectors.data, cubeOpen]);
+  }, [view, globeSel, world.data, evts.data, launches.data, overview.data, moodOpen, secExploded, secSel, sectors.data, cubeOpen]);
 
   const openStock = (s: string) => go({ k: "aktie", symbol: s.toUpperCase() });
   const crumbs = stack.map((v) =>
@@ -182,8 +205,10 @@ export default function App() {
                 ["banks", "Notenbanken"],
                 ["hotspots", "Brennpunkte"],
                 ["chokepoints", "Engpässe"],
-                ["quakes", "Erdbeben"],
-                ["disasters", "Katastrophen"],
+                ["events", "Erdbeben und Katastrophen"],
+                ["countries", "Länder"],
+                ["launches", "Raketenstarts"],
+                ["mood", "Stimmungsmond"],
               ] as const
             ).map(([k, n]) => (
               <label key={k}>
@@ -212,7 +237,11 @@ export default function App() {
           <CameraRig position={cam.pos} target={cam.target} flyKey={cam.key} />
 
           {view.k === "welt" && (
-            <Globe world={world.data} heat={heat.data} predictions={preds.data} events={evts.data?.events} layers={layers} sel={globeSel} onSelect={setGlobeSel} marketDetail={market.data} />
+            <Globe world={world.data} heat={heat.data} predictions={preds.data} events={evts.data?.events}
+              overview={overview.data}
+              launches={launches.data?.sites}
+              mood={mood.data}
+              layers={layers} sel={globeSel} onSelect={setGlobeSel} marketDetail={market.data} />
           )}
           {view.k === "stimmung" && <SentimentScene data={mood.data} open={moodOpen} setOpen={setMoodOpen} selected={moodSel} onSelect={setMoodSel} />}
           {view.k === "sektoren" && (
@@ -250,6 +279,12 @@ export default function App() {
               heat={heat.data}
               predictions={preds.data}
               events={evts.data}
+              overview={overview.data}
+              launches={launches.data}
+              mood={mood.data}
+              tab={worldTab}
+              setTab={setWorldTab}
+              onMood={() => go({ k: "stimmung" })}
               onMap={() => go({ k: "lage" })}
               sel={globeSel}
               onSel={setGlobeSel}
@@ -280,7 +315,7 @@ export default function App() {
 
       <footer>
         <MacroStrip data={macro.data} />
-        <div className="src dim">Daten: Nasdaq (Kurse, verzögert), FRED, EZB, BIS, Cboe, GDELT, Polymarket, Hyperliquid, CME über Yahoo, USGS, GDACS, Lagekarte von World Monitor · keine Anlageberatung</div>
+        <div className="src dim">Daten: Nasdaq (Kurse, verzögert), FRED, EZB, BIS, Cboe, GDELT, Polymarket, Hyperliquid, CME über Yahoo, USGS, GDACS, Weltbank, Wikipedia, Launch Library 2, Google News, Lagekarte von World Monitor · keine Anlageberatung</div>
       </footer>
     </div>
   );
@@ -291,4 +326,12 @@ function LageMap({ layers, view }: { layers: string[]; view: string }) {
   const v = LAGE_VIEWS.find((x) => x.id === view) ?? LAGE_VIEWS[0];
   const src = `https://www.worldmonitor.app/embed?layers=${(layers.length ? layers : ["conflicts"]).join(",")}&center=${v.center}&zoom=${v.zoom}&theme=dark&variant=full`;
   return <iframe className="lagemap" key={src} src={src} title="Lagekarte von World Monitor" referrerPolicy="no-referrer" />;
+}
+
+/** Mittelpunkt eines Landes für den Kameraflug, wenn es aus der Liste statt vom Globus gewählt wurde. */
+function centroidOf(num: string | null | undefined) {
+  const f = countryFeature(num);
+  if (!f) return null;
+  const [lon, lat] = geoCentroid(f);
+  return { lat, lon };
 }

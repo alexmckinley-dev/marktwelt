@@ -4,6 +4,7 @@ import { indicators, pctRank, percentile, sma, thin } from "./analytics.ts";
 import { countryDetail, countryOverview, warmCountries } from "./countries.ts";
 import { events } from "./events.ts";
 import { germanyBase, germanyNet, roadworks } from "./germany.ts";
+import { landDetail } from "./land.ts";
 import { satellites } from "./space.ts";
 import { extended } from "./extended.ts";
 import { launches } from "./launches.ts";
@@ -241,6 +242,7 @@ const routes: [RegExp, string[], Handler][] = [
   [/^\/api\/de\/base$/, [], () => germanyBase()],
   [/^\/api\/de\/netz$/, [], () => germanyNet()],
   [/^\/api\/de\/baustellen$/, [], () => roadworks()],
+  [/^\/api\/land\/([A-Za-z]{3})$/, ["iso3"], ({ iso3 }) => landDetail(iso3)],
   [/^\/api\/countries$/, [], () => countryOverview()],
   [/^\/api\/country\/([A-Za-z]{3})$/, ["iso3"], ({ iso3 }) => countryDetail(iso3)],
   [

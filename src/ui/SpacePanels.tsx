@@ -1,5 +1,5 @@
 // Panels für Satelliten, Himmelskörper und die Deutschlandkarte.
-import { useMemo } from "react";
+import { createContext, useContext, useMemo } from "react";
 import type { Baustellen, GermanyBase, Satellites } from "../api";
 import { fmt } from "../format";
 import { type DeLayers, type DeMode, type DeSel, partyColor, sameLand, shortParty, winner } from "../three/Germany";
@@ -34,20 +34,69 @@ export function SatPanel({ sat, state, data }: { sat: Satellites["named"][number
   );
 }
 
+export type SatCtl = { show: Record<string, boolean>; setShow: (id: string, v: boolean) => void; focus: string | null; setFocus: (id: string | null) => void };
+/** Sichtbarkeit und Fokus der Satellitengruppen, geteilt zwischen Seitenleiste und Szene. */
+export const SatControl = createContext<SatCtl | null>(null);
+
+/** Mittlere Höhe (Median) und Bahnneigung aus den Bahnelementen. */
+function swarmStats(tle: readonly (readonly [string, string])[]) {
+  const alt: number[] = [];
+  const inc: number[] = [];
+  for (const [, l2] of tle) {
+    const n = Number(l2.slice(52, 63));
+    const i = Number(l2.slice(8, 16));
+    if (!n) continue;
+    const w = (n * 2 * Math.PI) / 86400;
+    alt.push(Math.cbrt(398600.4418 / (w * w)) - 6378.137);
+    inc.push(i);
+  }
+  const med = (a: number[]) => (a.length ? a.sort((x, y) => x - y)[a.length >> 1] : null);
+  return { alt: med(alt), inc: med(inc) };
+}
+
 export function SwarmTable({ data }: { data: Satellites }) {
+  const ctl = useContext(SatControl);
+  const stats = useMemo(() => new Map(data.swarms.map((s) => [s.id, swarmStats(s.tle)])), [data]);
+  const focused = data.swarms.find((s) => s.id === ctl?.focus);
   return (
     <>
       <h3>Im Orbit</h3>
-      <table>
+      <table className="click">
         <tbody>
-          {data.swarms.map((s) => (
-            <tr key={s.id}>
-              <td><span style={{ color: s.color }}>●</span> {s.name}</td>
-              <td>{fmt(s.tle.length, 0)}</td>
-            </tr>
-          ))}
+          {data.swarms.map((s) => {
+            const st = stats.get(s.id);
+            const on = ctl?.show[s.id] !== false;
+            return (
+              <tr key={s.id} className={ctl?.focus === s.id ? "on" : ""} onClick={() => ctl?.setFocus(ctl.focus === s.id ? null : s.id)}>
+                <td onClick={(e) => e.stopPropagation()}>
+                  <input type="checkbox" checked={on} onChange={(e) => ctl?.setShow(s.id, e.target.checked)} title="ein- oder ausblenden" />
+                </td>
+                <td>
+                  <span style={{ color: s.color }}>●</span> {s.name}
+                </td>
+                <td>{fmt(s.tle.length, 0)}</td>
+                <td className="dim small">{st?.alt != null ? km(st.alt) : ""}</td>
+              </tr>
+            );
+          })}
+          <tr onClick={() => ctl?.setFocus(ctl.focus === "named" ? null : "named")} className={ctl?.focus === "named" ? "on" : ""}>
+            <td onClick={(e) => e.stopPropagation()}>
+              <input type="checkbox" checked={ctl?.show.named !== false} onChange={(e) => ctl?.setShow("named", e.target.checked)} title="ein- oder ausblenden" />
+            </td>
+            <td>Große Objekte</td>
+            <td>{data.named.length}</td>
+            <td className="dim small">ISS, Hubble …</td>
+          </tr>
         </tbody>
       </table>
+      {focused ? (
+        <p className="small">
+          <b style={{ color: focused.color }}>{focused.name}</b> hervorgehoben: {fmt(focused.tle.length, 0)} Satelliten, mittlere Höhe {km(stats.get(focused.id)?.alt ?? 0)}, Bahnneigung meist{" "}
+          {fmt(stats.get(focused.id)?.inc ?? 0, 1)}°. Nochmal klicken hebt den Fokus auf.
+        </p>
+      ) : (
+        <p className="dim small">Zeile anklicken hebt eine Gruppe hervor, Häkchen blendet sie aus.</p>
+      )}
     </>
   );
 }

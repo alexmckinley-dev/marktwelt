@@ -8,13 +8,13 @@ import { cached, diskCached, getBuffer, getJson, getText, throttle } from "./lib
 const MIN = 60_000;
 const DAY = 24 * 60 * MIN;
 
-type Ring = [number, number][];
-type Geom = { type: "Polygon"; coordinates: Ring[] } | { type: "MultiPolygon"; coordinates: Ring[][] } | { type: "MultiLineString" | "LineString"; coordinates: unknown };
+export type Ring = [number, number][];
+export type Geom = { type: "Polygon"; coordinates: Ring[] } | { type: "MultiPolygon"; coordinates: Ring[][] } | { type: "MultiLineString" | "LineString"; coordinates: unknown };
 
 // ---------- Geometrie vereinfachen ----------
 
 /** Douglas-Peucker in Grad; tol 0.002 ≈ 150 m. */
-function simplify(pts: [number, number][], tol: number): [number, number][] {
+export function simplify(pts: [number, number][], tol: number): [number, number][] {
   if (pts.length < 3) return pts;
   const [fx, fy] = pts[0];
   const [lx, ly] = pts[pts.length - 1];
@@ -50,12 +50,12 @@ function simplify(pts: [number, number][], tol: number): [number, number][] {
   return pts.filter((_, i) => keep[i]).map(([x, y]) => [Math.round(x * 1e4) / 1e4, Math.round(y * 1e4) / 1e4]);
 }
 
-function polys(g: Geom, tol: number): Ring[][] {
+export function polys(g: Geom, tol: number): Ring[][] {
   const list = g.type === "Polygon" ? [g.coordinates as Ring[]] : g.type === "MultiPolygon" ? (g.coordinates as Ring[][]) : [];
   return list.map((p) => p.map((r) => simplify(r, tol)).filter((r) => r.length >= 4)).filter((p) => p.length);
 }
 
-function lines(g: Geom, tol: number): number[][] {
+export function lines(g: Geom, tol: number): number[][] {
   const list = g.type === "LineString" ? [g.coordinates as Ring] : g.type === "MultiLineString" ? (g.coordinates as Ring[]) : [];
   return list.map((l) => simplify(l, tol).flat()).filter((l) => l.length >= 4);
 }

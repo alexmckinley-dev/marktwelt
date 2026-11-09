@@ -12,7 +12,8 @@ export type DeMode = "bund" | "land";
 export type DeSel = { type: "wk" | "city" | "bau"; id: string } | null;
 
 const K = 1.0;
-export const proj = (lon: number, lat: number): [number, number] => [(lon - 10.45) * 0.63 * K, -(lat - 51.16) * K];
+export type Proj = (lon: number, lat: number) => [number, number];
+export const proj: Proj = (lon, lat) => [(lon - 10.45) * 0.63 * K, -(lat - 51.16) * K];
 const TILE_H = 0.06;
 
 export const PARTY_COLOR: Record<string, string> = {
@@ -47,10 +48,10 @@ export const winner = (a: ElectionArea | undefined) => a?.parties.find((p) => p.
 
 export const sameLand = (a: string, b: string) => a === b || a.includes(b) || b.includes(a);
 
-function shapesOf(polys: Ring[][]) {
+function shapesOf(polys: Ring[][], P: Proj) {
   return polys.map((p) => {
     const toV = (r: Ring) => r.map(([lon, lat]) => {
-      const [x, z] = proj(lon, lat);
+      const [x, z] = P(lon, lat);
       return new THREE.Vector2(x, -z);
     });
     const shape = new THREE.Shape(toV(p[0]));
@@ -60,16 +61,17 @@ function shapesOf(polys: Ring[][]) {
 }
 
 /** Mittelpunkt (Schwerpunkt der Eckpunkte des größten Rings) für Kamera und Einflug. */
-export function centreOf(polys: Ring[][]): [number, number] {
+export function centreOf(polys: Ring[][], P: Proj = proj): [number, number] {
   const ring = polys.flatMap((p) => p[0]).length ? polys.reduce((a, p) => (p[0].length > a.length ? p[0] : a), polys[0][0]) : [];
   const n = ring.length || 1;
   const lon = ring.reduce((s, q) => s + q[0], 0) / n;
   const lat = ring.reduce((s, q) => s + q[1], 0) / n;
-  return proj(lon, lat);
+  return P(lon, lat);
 }
 
-function Tile({
+export function Tile({
   polys,
+  P = proj,
   color,
   delay,
   selected,
@@ -82,14 +84,15 @@ function Tile({
   selected: boolean;
   label: string;
   onClick: () => void;
+  P?: Proj;
 }) {
   const [hover, bind] = useHover();
   const geo = useMemo(() => {
-    const g = new THREE.ExtrudeGeometry(shapesOf(polys), { depth: TILE_H, bevelEnabled: false });
+    const g = new THREE.ExtrudeGeometry(shapesOf(polys, P), { depth: TILE_H, bevelEnabled: false });
     g.rotateX(-Math.PI / 2);
     return g;
-  }, [polys]);
-  const [cx, cz] = useMemo(() => centreOf(polys), [polys]);
+  }, [polys, P]);
+  const [cx, cz] = useMemo(() => centreOf(polys, P), [polys, P]);
   // Einflug: jede Kachel startet verstreut im Raum und setzt sich an ihren Platz.
   const from = useMemo(() => new THREE.Vector3((Math.random() - 0.5) * 14, 3 + Math.random() * 6, (Math.random() - 0.5) * 14), []);
   const ref = useRef<THREE.Group>(null);
@@ -128,7 +131,7 @@ function Tile({
   );
 }
 
-function Lines({ lines, color, y, opacity }: { lines: number[][]; color: string; y: number; opacity: number }) {
+export function Lines({ lines, color, y, opacity, P = proj }: { lines: number[][]; color: string; y: number; opacity: number; P?: Proj }) {
   const geo = useMemo(() => {
     let n = 0;
     for (const l of lines) n += l.length / 2 - 1;
@@ -136,8 +139,8 @@ function Lines({ lines, color, y, opacity }: { lines: number[][]; color: string;
     let o = 0;
     for (const l of lines) {
       for (let i = 2; i < l.length; i += 2) {
-        const [x0, z0] = proj(l[i - 2], l[i - 1]);
-        const [x1, z1] = proj(l[i], l[i + 1]);
+        const [x0, z0] = P(l[i - 2], l[i - 1]);
+        const [x1, z1] = P(l[i], l[i + 1]);
         pos.set([x0, y, z0, x1, y, z1], o);
         o += 6;
       }
@@ -145,7 +148,7 @@ function Lines({ lines, color, y, opacity }: { lines: number[][]; color: string;
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
     return g;
-  }, [lines, y]);
+  }, [lines, y, P]);
   return (
     <lineSegments geometry={geo}>
       <lineBasicMaterial color={color} transparent opacity={opacity} depthWrite={false} toneMapped={false} />
@@ -205,30 +208,49 @@ function Roadworks({ items, sel, onSelect }: { items: Baustelle[]; sel: DeSel; o
   );
 }
 
-function Cities({ cities, sel, onSelect }: { cities: GermanyBase["cities"]; sel: DeSel; onSelect: (s: DeSel) => void }) {
-  const list = useMemo(() => cities.filter((c) => c.pop >= 50000), [cities]);
+type CitySel = { type: string; id: string } | null;
+
+export function Cities({
+  cities,
+  sel,
+  onSelect,
+  P = proj,
+  minPop = 50000,
+  maxPop = 3.5e6,
+  labels = 14,
+}: {
+  cities: GermanyBase["cities"];
+  sel: CitySel;
+  onSelect: (s: { type: "city"; id: string }) => void;
+  P?: Proj;
+  minPop?: number;
+  maxPop?: number;
+  labels?: number;
+}) {
+  const list = useMemo(() => cities.filter((c) => c.pop >= minPop), [cities, minPop]);
   const ref = useRef<THREE.InstancedMesh>(null);
-  const hRef = (pop: number) => 0.03 + Math.sqrt(pop / 3.5e6) * 0.9;
+  const hRef = (pop: number) => 0.03 + Math.sqrt(pop / maxPop) * 0.9;
   useLayoutEffect(() => {
     const m = ref.current;
     if (!m) return;
     const o = new THREE.Object3D();
     const c = new THREE.Color();
     list.forEach((s, i) => {
-      const [x, z] = proj(s.lon, s.lat);
+      const [x, z] = P(s.lon, s.lat);
       const h = hRef(s.pop);
       o.position.set(x, TILE_H + h / 2, z);
       o.scale.set(1, h, 1);
       o.updateMatrix();
       m.setMatrixAt(i, o.matrix);
-      m.setColorAt(i, c.set(sel?.type === "city" && sel.id === s.name ? "#ffffff" : mix("#46e0c8", "#fff3b0", Math.min(1, Math.sqrt(s.pop / 3.5e6) * 1.4))));
+      m.setColorAt(i, c.set(sel?.type === "city" && sel.id === s.name ? "#ffffff" : mix("#46e0c8", "#fff3b0", Math.min(1, Math.sqrt(s.pop / maxPop) * 1.4))));
     });
     m.instanceMatrix.needsUpdate = true;
     if (m.instanceColor) m.instanceColor.needsUpdate = true;
-  }, [list, sel]);
+  }, [list, sel, P, maxPop]);
   return (
     <>
       <instancedMesh
+        key={list.length}
         ref={ref}
         args={[undefined, undefined, list.length]}
         onClick={(e) => {
@@ -239,8 +261,8 @@ function Cities({ cities, sel, onSelect }: { cities: GermanyBase["cities"]; sel:
         <cylinderGeometry args={[0.018, 0.018, 1, 10]} />
         <meshBasicMaterial toneMapped={false} transparent opacity={0.85} />
       </instancedMesh>
-      {list.slice(0, 14).map((s) => {
-        const [x, z] = proj(s.lon, s.lat);
+      {list.slice(0, labels).map((s) => {
+        const [x, z] = P(s.lon, s.lat);
         return (
           <Label key={s.name} position={[x, TILE_H + hRef(s.pop) + 0.08, z]} className="small">
             {s.name}

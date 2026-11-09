@@ -270,3 +270,18 @@ export type Baustelle = {
   text: string;
 };
 export type Baustellen = { items: Baustelle[]; roads: number; asOf: string };
+
+export type Leader = { name: string; party: string | null; color: string | null };
+export type Land = {
+  iso3: string;
+  name: string;
+  frame: { c: number; lat0: number; kx: number; s: number };
+  outline: number[][];
+  regions: { id: string; name: string; type: string; wd: string | null; polys: Ring[][]; head: Leader | null }[];
+  rail: number[][];
+  motorway: number[][];
+  road: number[][];
+  cities: { name: string; lat: number; lon: number; pop: number }[];
+  nation: { state: Leader | null; government: Leader | null; forms: string[] } | null;
+  errors: string[];
+};

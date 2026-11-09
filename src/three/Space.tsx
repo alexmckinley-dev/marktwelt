@@ -5,6 +5,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { eciToGeodetic, gstime, propagate, twoline2satrec, type SatRec } from "satellite.js";
 import * as THREE from "three";
 import type { Satellites } from "../api";
+import { mix as mixHex } from "../format";
 import { Label, latLon, useHover } from "./common";
 import { R, type GlobeSel } from "./Globe";
 
@@ -158,7 +159,8 @@ function NamedSat({ sat, selected, onClick, onState }: { sat: Named; selected: b
 }
 
 /** Schwärme (Starlink, GPS …) als feine Punkte; je Bild wird nur ein Teil neu berechnet. */
-function Swarm({ tle, color }: { tle: readonly (readonly [string, string])[]; color: string }) {
+/** focus: 1 hervorgehoben, 0 normal, −1 abgeblendet, weil eine andere Gruppe im Fokus ist. */
+function Swarm({ tle, color, focus }: { tle: readonly (readonly [string, string])[]; color: string; focus: 1 | 0 | -1 }) {
   const recs = useMemo(() => tle.map(([a, b]) => twoline2satrec(a, b)), [tle]);
   const geo = useMemo(() => {
     const g = new THREE.BufferGeometry();
@@ -193,7 +195,15 @@ function Swarm({ tle, color }: { tle: readonly (readonly [string, string])[]; co
   });
   return (
     <points geometry={geo}>
-      <pointsMaterial size={1.2} sizeAttenuation={false} color={color} transparent opacity={0.32} depthWrite={false} toneMapped={false} />
+      <pointsMaterial
+        size={focus === 1 ? 3 : 1.2}
+        sizeAttenuation={false}
+        color={focus === 1 ? mixHex(color, "#ffffff", 0.25) : color}
+        transparent
+        opacity={focus === 1 ? 1 : focus === -1 ? 0.05 : 0.32}
+        depthWrite={false}
+        toneMapped={false}
+      />
     </points>
   );
 }
@@ -203,17 +213,25 @@ export function SatelliteLayer({
   sel,
   onSelect,
   onState,
+  show = {},
+  focus = null,
 }: {
   data: Satellites | undefined;
   sel: GlobeSel;
   onSelect: (s: GlobeSel) => void;
   onState: (s: SatState) => void;
+  show?: Record<string, boolean>;
+  focus?: string | null;
 }) {
   const named = useMemo(() => data?.named.map((n) => ({ ...n, rec: twoline2satrec(n.l1, n.l2) })) ?? [], [data]);
   return (
     <group>
-      {data?.swarms.map((s) => <Swarm key={s.id} tle={s.tle} color={s.color} />)}
-      {named.map((n) => (
+      {data?.swarms
+        .filter((s) => show[s.id] !== false)
+        .map((s) => (
+          <Swarm key={s.id} tle={s.tle} color={s.color} focus={!focus ? 0 : focus === s.id ? 1 : -1} />
+        ))}
+      {show.named !== false && named.map((n) => (
         <NamedSat key={n.id} sat={n} selected={sel?.type === "sat" && sel.id === n.id} onClick={() => onSelect({ type: "sat", id: n.id })} onState={onState} />
       ))}
     </group>

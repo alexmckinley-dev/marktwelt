@@ -694,7 +694,7 @@ function statValue(s: CountryDetail["stats"][number]) {
   return `${fmt(s.value, 1)} ${s.unit}`;
 }
 
-function CountryPanel({
+export function CountryPanel({
   iso3,
   world,
   overview,

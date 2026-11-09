@@ -23,17 +23,20 @@ import {
   type GermanyBase,
   type GermanyNet,
   type Baustellen,
+  type Land,
 } from "./api";
 import { CalendarScene } from "./three/Calendar";
 import { CameraRig, PanelOffset, Starfield, latLon } from "./three/common";
 import { geoCentroid } from "d3-geo";
 import { Globe, R, countryFeature, type GlobeSel, type Layers } from "./three/Globe";
+import { CountryScene, type LandLayers, type LandSel, landProj } from "./three/Country";
 import { GermanyScene, centreOf, type DeLayers, type DeMode, type DeSel } from "./three/Germany";
 import { SectorsScene, sectorFocus } from "./three/Sectors";
 import { BODIES, Jwst, SatelliteLayer, SolarSystem, bodyScenePos, rSat, type SatState } from "./three/Space";
 import { CandleChart, MetricCube } from "./three/StockChart";
 import { CalendarPanel, LAGE_VIEWS, LagePanel, MacroStrip, SectorsPanel, StockPanel, WorldPanel } from "./ui/Panels";
-import { BodyPanel, GermanyPanel, SatPanel } from "./ui/SpacePanels";
+import { BodyPanel, GermanyPanel, SatControl, SatPanel } from "./ui/SpacePanels";
+import { LandPanel } from "./ui/LandPanel";
 
 type View =
   | { k: "welt" }
@@ -41,6 +44,7 @@ type View =
   | { k: "termine" }
   | { k: "lage" }
   | { k: "deutschland" }
+  | { k: "land"; iso3: string }
   | { k: "markt"; id: string }
   | { k: "aktie"; symbol: string };
 
@@ -51,11 +55,12 @@ const TABS: { k: View["k"]; name: string }[] = [
 ];
 const viewName = (k: View["k"]) => (k === "lage" ? "Lagekarte" : k === "deutschland" ? "Deutschland" : TABS.find((t) => t.k === k)?.name ?? k);
 
-const toHash = (v: View) => (v.k === "aktie" ? `#/aktie/${v.symbol}` : v.k === "markt" ? `#/markt/${v.id}` : `#/${v.k}`);
+const toHash = (v: View) => (v.k === "aktie" ? `#/aktie/${v.symbol}` : v.k === "markt" ? `#/markt/${v.id}` : v.k === "land" ? `#/land/${v.iso3}` : `#/${v.k}`);
 function fromHash(): View {
   const [, k, arg] = location.hash.split("/");
   if (k === "aktie" && arg) return { k, symbol: decodeURIComponent(arg).toUpperCase() };
   if (k === "markt" && arg) return { k, id: arg };
+  if (k === "land" && /^[A-Za-z]{3}$/.test(arg ?? "")) return arg.toUpperCase() === "DEU" ? { k: "deutschland" } : { k, iso3: arg.toUpperCase() };
   if (k === "sektoren" || k === "termine" || k === "lage" || k === "deutschland") return { k };
   return { k: "welt" };
 }
@@ -76,7 +81,7 @@ export default function App() {
   useEffect(() => {
     const onHash = () => {
       const v = fromHash();
-      setStack((s) => (toHash(s.at(-1)!) === toHash(v) ? s : v.k === "aktie" || v.k === "markt" || v.k === "deutschland" ? [...s, v] : v.k === "welt" ? [v] : [{ k: "welt" }, v]));
+      setStack((s) => (toHash(s.at(-1)!) === toHash(v) ? s : v.k === "aktie" || v.k === "markt" || v.k === "deutschland" || v.k === "land" ? [...s, v] : v.k === "welt" ? [v] : [{ k: "welt" }, v]));
     };
     addEventListener("hashchange", onHash);
     return () => removeEventListener("hashchange", onHash);
@@ -94,7 +99,11 @@ export default function App() {
     countries: true,
     launches: true,
     mood: true,
+    sats: true,
   });
+  const [satShow, setSatShow] = useState<Record<string, boolean>>({});
+  const [satFocus, setSatFocus] = useState<string | null>(null);
+  const satCtl = useMemo(() => ({ show: satShow, setShow: (id: string, v: boolean) => setSatShow((x) => ({ ...x, [id]: v })), focus: satFocus, setFocus: setSatFocus }), [satShow, satFocus]);
   const [lageLayers, setLageLayers] = useState<string[]>(["conflicts", "earthquakes", "weather"]);
   const [lageView, setLageView] = useState("welt");
   const [worldTab, setWorldTab] = useState("lage");
@@ -107,19 +116,26 @@ export default function App() {
   const [deLayers, setDeLayers] = useState<DeLayers>({ wahl: true, bahn: true, autobahn: true, bundes: false, baustellen: true, staedte: true });
   const [deMode, setDeMode] = useState<DeMode>("bund");
   const [deSel, setDeSel] = useState<DeSel>(null);
+  const [landLayers, setLandLayers] = useState<LandLayers>({ regionen: true, bahn: true, autobahn: true, strassen: false, staedte: true });
+  const [landSel, setLandSel] = useState<LandSel>(null);
+  const [explodeTo, setExplodeTo] = useState<string | null>(null);
   const explodeTimer = useRef<number | undefined>(undefined);
 
-  // Klick auf Deutschland: Die Welt explodiert, danach setzt sich die Deutschlandkarte zusammen.
+  // Klick auf ein Land: Die Welt explodiert, danach setzt sich die Karte des Landes zusammen.
+  // Deutschland hat eine eigene, genauere Karte (Wahlkreise, DLM250, Baustellen).
   const selectGlobe = (s: GlobeSel) => {
-    if (s?.type === "country" && s.id === "DEU" && !exploding) {
+    if (s?.type === "country" && !exploding) {
       setGlobeSel(s);
       setExploding(true);
+      setExplodeTo(s.id);
       clearTimeout(explodeTimer.current);
       explodeTimer.current = window.setTimeout(() => {
         setExploding(false);
+        setExplodeTo(null);
         setGlobeSel(null);
         setDeSel(null);
-        go({ k: "deutschland" });
+        setLandSel(null);
+        go(s.id === "DEU" ? { k: "deutschland" } : { k: "land", iso3: s.id });
       }, 1300);
       return;
     }
@@ -131,11 +147,11 @@ export default function App() {
   const world = useApi<World>("world", 5 * 60_000);
   const heat = useApi<HotspotHeat[]>("hotspots", 30_000);
   const macro = useApi<Macro[]>("macro", 30 * 60_000);
-  const evts = useApi<Events>(view.k === "welt" ? "events" : null, 15 * 60_000);
+  const evts = useApi<Events>(view.k === "welt" || view.k === "land" ? "events" : null, 15 * 60_000);
   const preds = useApi<Prediction[]>(view.k === "welt" ? "predictions" : null, 15 * 60_000);
   const mood = useApi<Sentiment>(view.k === "welt" ? "sentiment" : null, 15 * 60_000);
-  const overview = useApi<CountryOverview>(view.k === "welt" ? "countries" : null, 30 * 60_000);
-  const launches = useApi<Launches>(view.k === "welt" ? "launches" : null, 30 * 60_000);
+  const overview = useApi<CountryOverview>(view.k === "welt" || view.k === "land" ? "countries" : null, 30 * 60_000);
+  const launches = useApi<Launches>(view.k === "welt" || view.k === "land" ? "launches" : null, 30 * 60_000);
   const sectors = useApi<Sector[]>(view.k === "sektoren" ? "sectors" : null, 5 * 60_000);
   const sectorDetail = useApi<SectorDetail>(view.k === "sektoren" && secSel ? `sector/${secSel}` : null);
   const cal = useApi<Earning[]>(view.k === "termine" ? "calendar?days=10" : null);
@@ -143,7 +159,9 @@ export default function App() {
   const market = useApi<MarketDetail>(marketId ? `market/${marketId}` : null);
   const stock = useApi<Stock>(view.k === "aktie" ? `stock/${encodeURIComponent(view.symbol)}` : null);
   const sats = useApi<Satellites>(view.k === "welt" ? "satellites" : null, 6 * 3600_000);
-  const deWanted = view.k === "deutschland" || exploding;
+  const deWanted = view.k === "deutschland" || explodeTo === "DEU";
+  const landIso = view.k === "land" ? view.iso3 : explodeTo && explodeTo !== "DEU" ? explodeTo : null;
+  const land = useApi<Land>(landIso ? `land/${landIso}` : null);
   const deBase = useApi<GermanyBase>(deWanted ? "de/base" : null);
   const deNet = useApi<GermanyNet>(deWanted ? "de/netz" : null);
   const deWorks = useApi<Baustellen>(deWanted ? "de/baustellen" : null, 30 * 60_000);
@@ -187,6 +205,9 @@ export default function App() {
           return { pos: p.clone().normalize().multiplyScalar(4.4).add(V(0, 0.6, 0)), target: p.clone().multiplyScalar(0.55), key: `w-${globeSel.id}` };
         }
       }
+      // Fokus auf eine Satellitengruppe: so weit zurück, dass die ganze Schale ins Bild passt.
+      if (satFocus === "geo" || satFocus === "gps-ops" || satFocus === "galileo") return { pos: V(0, 5, 17), target: V(0, 0, 0), key: `f-${satFocus}` };
+      if (satFocus) return { pos: V(0, 2.4, 8.4), target: V(0, 0, 0), key: `f-${satFocus}` };
       return { pos: V(0, 1.4, 6.6), target: V(0, 0, 0), key: "w" };
     }
     if (view.k === "sektoren") {
@@ -202,16 +223,25 @@ export default function App() {
       }
       return { pos: V(0, 8.5, 6.5), target: V(0, 0, 0.2), key: "de" };
     }
+    if (view.k === "land") {
+      const d = land.data?.iso3 === view.iso3 ? land.data : null;
+      const r = landSel?.type === "region" && d ? d.regions.find((x) => x.id === landSel.id) : null;
+      if (r && d) {
+        const [x, z] = centreOf(r.polys, landProj(d.frame));
+        return { pos: V(x, 2.6, z + 2.4), target: V(x, 0, z), key: `land-${landSel!.id}` };
+      }
+      return { pos: V(0, 8.5, 6.5), target: V(0, 0, 0.2), key: `land-${view.iso3}` };
+    }
     if (view.k === "lage") return { pos: V(0, 1.4, 6.6), target: V(0, 0, 0), key: "l" };
     if (view.k === "termine") return { pos: V(7.5, 2.5, 7.5), target: V(0, 0, 0), key: "t" };
     return cubeOpen ? { pos: V(4.6, 1.2, 7.5), target: V(4.6, 0.6, 0), key: "a-open" } : { pos: V(0.9, 1.4, 11.5), target: V(0.9, 0.2, 0), key: `a-${view.k}` };
     // satState zählt nur beim ersten Wert, sonst folgt die Kamera dem Satelliten ruckartig
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, globeSel, world.data, evts.data, launches.data, overview.data, !!satState, deSel, deBase.data, secExploded, secSel, sectors.data, cubeOpen]);
+  }, [view, globeSel, world.data, evts.data, launches.data, overview.data, !!satState, satFocus, deSel, deBase.data, landSel, land.data, secExploded, secSel, sectors.data, cubeOpen]);
 
   const openStock = (s: string) => go({ k: "aktie", symbol: s.toUpperCase() });
   const crumbs = stack.map((v) =>
-    v.k === "aktie" ? v.symbol : v.k === "markt" ? world.data?.markets.find((m) => m.id === v.id)?.name ?? v.id : viewName(v.k),
+    v.k === "aktie" ? v.symbol : v.k === "land" ? overview.data?.list.find((c) => c.iso3 === v.iso3)?.name ?? land.data?.name ?? v.iso3 : v.k === "markt" ? world.data?.markets.find((m) => m.id === v.id)?.name ?? v.id : viewName(v.k),
   );
   const chart = view.k === "aktie" ? stock.data : view.k === "markt" ? market.data : undefined;
   const spyQuote = world.data?.markets.find((m) => m.id === "us")?.quote;
@@ -263,6 +293,7 @@ export default function App() {
                 ["countries", "Länder"],
                 ["launches", "Raketenstarts"],
                 ["mood", "Stimmungsmond"],
+                ["sats", "Satelliten"],
               ] as const
             ).map(([k, n]) => (
               <label key={k}>
@@ -287,7 +318,7 @@ export default function App() {
           <pointLight position={[-6, -3, -5]} intensity={30} color="#2bd4e0" />
           {view.k === "welt" ? <Starfield count={6000} radius={2600} px={1.3} /> : <Starfield />}
           <PanelOffset />
-          <OrbitControls makeDefault enablePan enableDamping dampingFactor={0.08} autoRotate={view.k === "welt" && !globeSel && !exploding} autoRotateSpeed={0.35} minDistance={view.k === "deutschland" ? 0.6 : 2.5} maxDistance={view.k === "welt" ? 1500 : 30} zoomSpeed={view.k === "welt" ? 1.6 : 1} />
+          <OrbitControls makeDefault enablePan enableDamping dampingFactor={0.08} autoRotate={view.k === "welt" && !globeSel && !exploding} autoRotateSpeed={0.35} minDistance={view.k === "deutschland" || view.k === "land" ? 0.6 : 2.5} maxDistance={view.k === "welt" ? 1500 : 30} zoomSpeed={view.k === "welt" ? 1.6 : 1} />
           <CameraRig position={cam.pos} target={cam.target} flyKey={cam.key} />
 
           {view.k === "welt" && (
@@ -300,7 +331,7 @@ export default function App() {
           )}
           {view.k === "welt" && !exploding && (
             <>
-              <SatelliteLayer data={sats.data} sel={globeSel} onSelect={selectGlobe} onState={setSatState} />
+              {layers.sats && <SatelliteLayer data={sats.data} sel={globeSel} onSelect={selectGlobe} onState={setSatState} show={satShow} focus={satFocus} />}
               <SolarSystem sel={globeSel} onSelect={selectGlobe} />
               <Jwst selected={globeSel?.type === "body" && globeSel.id === "jwst"} onClick={() => selectGlobe({ type: "body", id: "jwst" })} />
             </>
@@ -308,6 +339,7 @@ export default function App() {
           {view.k === "deutschland" && (
             <GermanyScene base={deBase.data} net={deNet.data} works={deWorks.data?.items} layers={deLayers} mode={deMode} sel={deSel} onSelect={setDeSel} />
           )}
+          {view.k === "land" && <CountryScene key={view.iso3} data={land.data?.iso3 === view.iso3 ? land.data : undefined} layers={landLayers} sel={landSel} onSelect={setLandSel} />}
           {view.k === "sektoren" && (
             <SectorsScene
               sectors={sectors.data}
@@ -335,6 +367,7 @@ export default function App() {
 
         {view.k === "lage" && <LageMap layers={lageLayers} view={lageView} />}
 
+        <SatControl.Provider value={satCtl}>
         <aside>
           {view.k === "lage" && <LagePanel layers={lageLayers} setLayers={setLageLayers} view={lageView} setView={setLageView} />}
           {view.k === "welt" && globeSel?.type === "sat" && (
@@ -402,12 +435,32 @@ export default function App() {
           {view.k === "markt" && (
             <StockPanel data={market.data} error={market.error} title={world.data?.markets.find((m) => m.id === view.id)?.name} />
           )}
+          {view.k === "land" && (
+            <LandPanel
+              iso3={view.iso3}
+              data={land.data?.iso3 === view.iso3 ? land.data : undefined}
+              error={land.error}
+              layers={landLayers}
+              setLayers={setLandLayers}
+              sel={landSel}
+              onSel={setLandSel}
+              world={world.data}
+              overview={overview.data}
+              events={evts.data}
+              launches={launches.data}
+              onGlobe={(s) => {
+                setStack([{ k: "welt" }]);
+                setGlobeSel(s);
+              }}
+            />
+          )}
         </aside>
+        </SatControl.Provider>
       </main>
 
       <footer>
         <MacroStrip data={macro.data} />
-        <div className="src dim">Daten: Nasdaq (Kurse, verzögert), FRED, EZB, BIS, Cboe, GDELT, Polymarket, Hyperliquid, CME über Yahoo, USGS, GDACS, Weltbank, Wikipedia, Launch Library 2, Google News, Lagekarte von World Monitor · keine Anlageberatung</div>
+        <div className="src dim">Daten: Nasdaq (Kurse, verzögert), FRED, EZB, BIS, Cboe, GDELT, Polymarket, Hyperliquid, CME über Yahoo, USGS, GDACS, Weltbank, Wikipedia, Wikidata, Natural Earth, GeoNames, CelesTrak, Launch Library 2, Google News, Lagekarte von World Monitor · keine Anlageberatung</div>
       </footer>
     </div>
   );

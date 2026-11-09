@@ -13,6 +13,7 @@ import { Burst, Label, Pulse, latLon, upTo, useHover } from "./common";
 export const R = 2;
 
 export type Layers = {
+  sats: boolean;
   markets: boolean;
   banks: boolean;
   hotspots: boolean;

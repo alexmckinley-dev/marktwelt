@@ -81,11 +81,14 @@ export function Label({
   position = [0, 0, 0],
   className = "",
   onClick,
+  hideIf,
 }: {
   children: ReactNode;
   position?: [number, number, number] | THREE.Vector3;
   className?: string;
   onClick?: () => void;
+  /** bekommt die Weltposition; true blendet das Schild aus (z. B. hinter der Erde) */
+  hideIf?: (world: THREE.Vector3) => boolean;
 }) {
   const group = useRef<THREE.Group>(null);
   const { gl, camera, size, events } = useThree();
@@ -123,9 +126,11 @@ export function Label({
     const g = group.current;
     const e = el.current;
     if (!g || !e) return;
-    g.getWorldPosition(v).project(camera);
+    g.getWorldPosition(v);
+    const hidden = hideIf?.(v) ?? false;
+    v.project(camera);
     // hinter der Kamera ausblenden
-    if (v.z > 1 || v.z < -1) {
+    if (hidden || v.z > 1 || v.z < -1) {
       e.style.display = "none";
       return;
     }

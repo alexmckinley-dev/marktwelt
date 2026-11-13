@@ -55,6 +55,7 @@ Alle ohne API-Schlüssel, mit Cache und Drossel im Server.
 | Wikidata SPARQL | Staats- und Regierungschefs, Regierungschefs der Provinzen, Parteien und Parteifarben | 1 Tag |
 | Autobahn GmbH (`verkehr.autobahn.de`) | Laufende Baustellen auf allen Autobahnen | 30 min |
 | World Monitor (`/embed`) | Lagekarte als iframe, freie Stufe ohne Schlüssel | stündlich |
+| d3-celestial (Olaf Frohn, BSD), Hipparcos/Yale | Sternenhimmel: 5.044 Sterne bis Größenklasse 6, Sternbilder mit deutschen Namen; dreht sich nach der Sternzeit | jährlich |
 | Radware Live Threat Map | Cyberangriffe als iframe in der Lagekarte; die interne API der Seite wird nicht abgerufen | live |
 
 Ländermärkte erscheinen über US-gelistete Länder-ETFs (iShares MSCI …), also in USD. Kurse sind verzögert.

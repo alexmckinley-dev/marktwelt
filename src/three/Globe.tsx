@@ -13,6 +13,7 @@ import { Burst, Label, Pulse, latLon, upTo, useHover } from "./common";
 export const R = 2;
 
 export type Layers = {
+  sky: boolean;
   sats: boolean;
   flights: boolean;
   aurora: boolean;

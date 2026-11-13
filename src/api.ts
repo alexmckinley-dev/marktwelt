@@ -300,6 +300,14 @@ export type SpaceWeather = {
   aurora: [number, number, number][];
 };
 export type Cables = { cables: { id: string; name: string; color: string; lines: number[][] }[]; asOf: string };
+export type Sky = {
+  /** [Rektaszension °, Deklination °, Größenklasse, B−V] */
+  stars: [number, number, number, number][];
+  named: { name: string; ra: number; dec: number; mag: number }[];
+  lines: number[][];
+  constellations: { id: string; name: string; ra: number; dec: number; rank: number }[];
+  magLimit: number;
+};
 export type EventHistory = { events: GeoEvent[]; from: string; to: string };
 export type Power = {
   time: string;

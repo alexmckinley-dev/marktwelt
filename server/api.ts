@@ -7,6 +7,7 @@ import { germanyBase, germanyNet, roadworks } from "./germany.ts";
 import { landDetail } from "./land.ts";
 import { cables, chokeTraffic, flights, pegel, power, spaceWeather } from "./live.ts";
 import { satellites } from "./space.ts";
+import { sky } from "./sky.ts";
 import { extended } from "./extended.ts";
 import { launches } from "./launches.ts";
 import { settle } from "./lib.ts";
@@ -247,6 +248,7 @@ const routes: [RegExp, string[], Handler][] = [
   [/^\/api\/fluege$/, [], () => flights()],
   [/^\/api\/weltraumwetter$/, [], () => spaceWeather()],
   [/^\/api\/kabel$/, [], () => cables()],
+  [/^\/api\/sterne$/, [], () => sky()],
   [/^\/api\/ereignisse-30$/, [], () => eventHistory()],
   [/^\/api\/de\/strom$/, [], () => power()],
   [/^\/api\/de\/pegel$/, [], () => pegel()],

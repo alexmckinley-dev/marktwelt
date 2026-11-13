@@ -28,11 +28,13 @@ import {
   type Flights,
   type SpaceWeather,
   type Cables,
+  type Sky,
   type EventHistory,
   type Power,
   type Pegel,
 } from "./api";
 import { CalendarScene } from "./three/Calendar";
+import { SkyLayer } from "./three/Sky";
 import { CameraRig, PanelOffset, Starfield, latLon } from "./three/common";
 import { geoCentroid } from "d3-geo";
 import { Globe, R, countryFeature, type GlobeSel, type Layers } from "./three/Globe";
@@ -112,6 +114,7 @@ export default function App() {
     flights: true,
     aurora: true,
     cables: true,
+    sky: false,
   });
   const [lapse, setLapse] = useState<number | null>(null);
   const [lapsePlaying, setLapsePlaying] = useState(false);
@@ -177,6 +180,7 @@ export default function App() {
   const traffic = useApi<Traffic>(view.k === "welt" ? "engpaesse" : null, 6 * 3600_000);
   const flights = useApi<Flights>(view.k === "welt" && layers.flights ? "fluege" : null, 15 * 60_000);
   const weather = useApi<SpaceWeather>(view.k === "welt" ? "weltraumwetter" : null, 15 * 60_000);
+  const sky = useApi<Sky>(view.k === "welt" ? "sterne" : null);
   const cables = useApi<Cables>(view.k === "welt" && layers.cables ? "kabel" : null);
   const evHistory = useApi<EventHistory>(lapse != null ? "ereignisse-30" : null, 60 * 60_000);
   const live = useMemo(
@@ -345,6 +349,7 @@ export default function App() {
                 ["flights", "Flugzeuge"],
                 ["aurora", "Polarlicht"],
                 ["cables", "Seekabel"],
+                ["sky", "Sternbilder"],
               ] as const
             ).map(([k, n]) => (
               <label key={k}>
@@ -367,7 +372,7 @@ export default function App() {
           <ambientLight intensity={0.35} />
           <directionalLight position={[5, 6, 4]} intensity={1.4} />
           <pointLight position={[-6, -3, -5]} intensity={30} color="#2bd4e0" />
-          {view.k === "welt" ? <Starfield count={6000} radius={2600} px={1.3} /> : <Starfield />}
+          {view.k === "welt" ? (sky.data ? <SkyLayer data={sky.data} constellations={layers.sky} /> : null) : <Starfield />}
           <PanelOffset />
           <OrbitControls makeDefault enablePan enableDamping dampingFactor={0.08} autoRotate={view.k === "welt" && !globeSel && !exploding} autoRotateSpeed={0.35} minDistance={view.k === "deutschland" || view.k === "land" ? 0.6 : 2.5} maxDistance={view.k === "welt" ? 1500 : 30} zoomSpeed={view.k === "welt" ? 1.6 : 1} />
           <CameraRig position={cam.pos} target={cam.target} flyKey={cam.key} />
@@ -522,7 +527,7 @@ export default function App() {
 
       <footer>
         <MacroStrip data={macro.data} />
-        <div className="src dim">Daten: Nasdaq (Kurse, verzögert), FRED, EZB, BIS, Cboe, GDELT, Polymarket, Hyperliquid, CME über Yahoo, USGS, GDACS, Weltbank, Wikipedia, Wikidata, Energy-Charts, PEGELONLINE, Natural Earth, GeoNames, CelesTrak, IMF PortWatch, OpenSky, NOAA SWPC, TeleGeography, Launch Library 2, Google News, Lagekarten von World Monitor und Radware · keine Anlageberatung</div>
+        <div className="src dim">Daten: Nasdaq (Kurse, verzögert), FRED, EZB, BIS, Cboe, GDELT, Polymarket, Hyperliquid, CME über Yahoo, USGS, GDACS, Weltbank, Wikipedia, Wikidata, Energy-Charts, PEGELONLINE, Natural Earth, GeoNames, CelesTrak, IMF PortWatch, OpenSky, NOAA SWPC, TeleGeography, Launch Library 2, Google News, Sternkatalog d3-celestial, Lagekarten von World Monitor und Radware · keine Anlageberatung</div>
       </footer>
     </div>
   );

@@ -61,7 +61,7 @@ export function CountryScene({ data, layers, sel, onSelect }: { data: Land | und
       })}
       <Lines P={P} lines={borders} color="#e8f6ff" y={TILE_H + 0.003} opacity={0.3} />
       <Lines P={P} lines={data.outline} color="#e8f6ff" y={TILE_H + 0.004} opacity={0.8} />
-      {layers.strassen && <Lines P={P} lines={data.road} color="#c9d6e6" y={TILE_H + 0.006} opacity={0.3} />}
+      {layers.strassen && <Lines P={P} lines={data.road} color="#c9d6e6" y={TILE_H + 0.006} opacity={data.motorway.length < 10 ? 0.75 : 0.3} />}
       {layers.autobahn && <Lines P={P} lines={data.motorway} color="#f4f8ff" y={TILE_H + 0.008} opacity={0.9} />}
       {layers.bahn && <Lines P={P} lines={data.rail} color="#ffb347" y={TILE_H + 0.01} opacity={0.95} />}
       {layers.staedte && data.cities.length > 0 && (

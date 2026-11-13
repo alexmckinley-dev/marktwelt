@@ -202,6 +202,10 @@ export default function App() {
   const deWanted = view.k === "deutschland" || explodeTo === "DEU";
   const landIso = view.k === "land" ? view.iso3 : explodeTo && explodeTo !== "DEU" ? explodeTo : null;
   const land = useApi<Land>(landIso ? `land/${landIso}` : null);
+  // Ohne Autobahnen (Island, viele kleine Länder) sind die Fernstraßen das Netz, also gleich zeigen.
+  useEffect(() => {
+    if (land.data && land.data.motorway.length < 10) setLandLayers((l) => ({ ...l, strassen: true }));
+  }, [land.data]);
   const deBase = useApi<GermanyBase>(deWanted ? "de/base" : null);
   const deNet = useApi<GermanyNet>(deWanted ? "de/netz" : null);
   const deWorks = useApi<Baustellen>(deWanted ? "de/baustellen" : null, 30 * 60_000);

@@ -276,7 +276,10 @@ export function LandPanel({
           ) : (
             `${data.name} hat in Natural Earth keine Provinzgliederung; die Karte zeigt das ganze Land.`
           )}{" "}
-          Die Karte zeigt {fmt(data.rail.length, 0)} Bahnabschnitte, {fmt(data.motorway.length, 0)} Autobahnabschnitte und {pillars} Städte als Säulen.
+          Die Karte zeigt {fmt(data.rail.length, 0)} Bahnabschnitte, {fmt(data.motorway.length, 0)} Autobahnabschnitte, {fmt(data.road.length, 0)} Abschnitte von
+          Fernstraßen und {pillars} Städte als Säulen.
+          {data.rail.length === 0 && " Natural Earth verzeichnet hier keine Eisenbahn."}
+          {data.motorway.length === 0 && " Autobahnen im engeren Sinn gibt es keine, das Netz bilden die Fernstraßen."}
         </p>
       </div>
       {parties.length > 0 && (

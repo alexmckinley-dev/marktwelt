@@ -35,7 +35,7 @@ import {
 } from "./api";
 import { CalendarScene } from "./three/Calendar";
 import { SkyLayer } from "./three/Sky";
-import { CameraRig, PanelOffset, Starfield, latLon } from "./three/common";
+import { CameraRig, PanelOffset, SmoothZoom, Starfield, latLon } from "./three/common";
 import { geoCentroid } from "d3-geo";
 import { Globe, R, countryFeature, type GlobeSel, type Layers } from "./three/Globe";
 import { CountryScene, type LandLayers, type LandSel, landProj } from "./three/Country";
@@ -375,6 +375,7 @@ export default function App() {
           {view.k === "welt" ? (sky.data ? <SkyLayer data={sky.data} constellations={layers.sky} /> : null) : <Starfield />}
           <PanelOffset />
           <OrbitControls makeDefault enablePan enableDamping dampingFactor={0.08} autoRotate={view.k === "welt" && !globeSel && !exploding} autoRotateSpeed={0.35} minDistance={view.k === "deutschland" || view.k === "land" ? 0.6 : 2.5} maxDistance={view.k === "welt" ? 1500 : 30} zoomSpeed={view.k === "welt" ? 1.6 : 1} />
+          <SmoothZoom speed={view.k === "welt" ? 1.5 : 1} />
           <CameraRig position={cam.pos} target={cam.target} flyKey={cam.key} />
 
           {view.k === "welt" && (

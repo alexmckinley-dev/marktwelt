@@ -204,3 +204,74 @@ export function PanelOffset({ px = 384 }: { px?: number }) {
   }, [camera, size, px]);
   return null;
 }
+
+/** Weiches Zoomen mit Mausrad und Trackpad. OrbitControls springt je Ereignis und verzehnfacht
+ *  Pinch-Gesten; hier sammeln Rad, Zwei-Finger-Scrollen und Pinch ein Ziel, dem die Kamera
+ *  gedämpft folgt. Der Abstand ändert sich exponentiell, so fühlt sich der Zoom nah und fern gleich an.
+ *  Touch-Pinch auf dem Handy bleibt bei OrbitControls. */
+export function SmoothZoom({ speed = 1 }: { speed?: number }) {
+  const { camera, gl, controls } = useThree() as unknown as {
+    camera: THREE.PerspectiveCamera;
+    gl: THREE.WebGLRenderer;
+    controls: { target: THREE.Vector3; minDistance: number; maxDistance: number } | null;
+  };
+  const goal = useRef<number | null>(null);
+  const ctl = useRef(controls);
+  ctl.current = controls;
+  const sp = useRef(speed);
+  sp.current = speed;
+
+  useEffect(() => {
+    const canvas = gl.domElement;
+    const area = canvas.parentElement ?? canvas;
+    const dist = () => (ctl.current ? camera.position.distanceTo(ctl.current.target) : 0);
+    const push = (logStep: number) => {
+      const c = ctl.current;
+      if (!c) return;
+      const d = goal.current ?? dist();
+      goal.current = THREE.MathUtils.clamp(d * Math.exp(logStep), c.minDistance, c.maxDistance);
+    };
+    const onWheel = (e: WheelEvent) => {
+      if (!area.contains(e.target as Node)) return;
+      e.preventDefault();
+      e.stopPropagation(); // OrbitControls soll das Rad nicht auch noch verarbeiten
+      let dy = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 100 : 1);
+      dy = THREE.MathUtils.clamp(dy, -200, 200); // einzelne Ausreißer großer Mausräder bremsen
+      // Pinch kommt als Rad mit ctrlKey und kleinen Werten
+      push(e.ctrlKey ? dy * 0.008 : dy * 0.0016 * sp.current); // Pinch etwa 1:1 zur Fingerbewegung
+    };
+    // Safari meldet Pinch als eigene Geste
+    let lastScale = 1;
+    const onGestureStart = (e: Event) => {
+      e.preventDefault();
+      lastScale = 1;
+    };
+    const onGesture = (e: Event) => {
+      e.preventDefault();
+      const s = (e as unknown as { scale: number }).scale;
+      push(-Math.log(s / lastScale) * 1.2 * sp.current);
+      lastScale = s;
+    };
+    window.addEventListener("wheel", onWheel, { passive: false, capture: true });
+    area.addEventListener("gesturestart", onGestureStart);
+    area.addEventListener("gesturechange", onGesture);
+    return () => {
+      window.removeEventListener("wheel", onWheel, { capture: true });
+      area.removeEventListener("gesturestart", onGestureStart);
+      area.removeEventListener("gesturechange", onGesture);
+    };
+  }, [gl, camera]);
+
+  const off = useMemo(() => new THREE.Vector3(), []);
+  useFrame((_, dt) => {
+    const c = ctl.current;
+    const g = goal.current;
+    if (!c || g == null) return;
+    off.copy(camera.position).sub(c.target);
+    const d = off.length();
+    const nd = d + (g - d) * (1 - Math.exp(-Math.min(dt, 0.05) * 10));
+    camera.position.copy(c.target).add(off.multiplyScalar(nd / d));
+    if (Math.abs(g - nd) / g < 0.002) goal.current = null;
+  });
+  return null;
+}

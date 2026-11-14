@@ -35,6 +35,7 @@ import {
 } from "./api";
 import { CalendarScene } from "./three/Calendar";
 import { SkyLayer } from "./three/Sky";
+import { GridLayer } from "./three/Grid";
 import { CameraRig, PanelOffset, SmoothZoom, Starfield, latLon } from "./three/common";
 import { geoCentroid } from "d3-geo";
 import { Globe, R, countryFeature, type GlobeSel, type Layers } from "./three/Globe";
@@ -115,6 +116,7 @@ export default function App() {
     aurora: true,
     cables: true,
     sky: false,
+    grid: true,
   });
   const [lapse, setLapse] = useState<number | null>(null);
   const [lapsePlaying, setLapsePlaying] = useState(false);
@@ -350,6 +352,7 @@ export default function App() {
                 ["aurora", "Polarlicht"],
                 ["cables", "Seekabel"],
                 ["sky", "Sternbilder"],
+                ["grid", "Zeitzonen und Achse"],
               ] as const
             ).map(([k, n]) => (
               <label key={k}>
@@ -392,6 +395,7 @@ export default function App() {
               {layers.flights && <FlightLayer data={flights.data} />}
               {layers.aurora && <AuroraLayer data={weather.data} />}
               {layers.cables && <CableLayer data={cables.data} />}
+              {layers.grid && <GridLayer />}
               {lapse != null && evHistory.data && <TimelapseLayer events={evHistory.data.events} t={lapse} />}
               {layers.sats && <SatelliteLayer data={sats.data} sel={globeSel} onSelect={selectGlobe} onState={setSatState} show={satShow} focus={satFocus} />}
               <SolarSystem sel={globeSel} onSelect={selectGlobe} />
